@@ -1,302 +1,232 @@
-> **CYRVIS** — a voice-first desktop agent built on UI-TARS.
-> Start here: [README.cyrvis.md](./README.cyrvis.md) · Docs: [doc/](./doc/README.md)
-
-<picture>
-  <img alt="Agent TARS Banner" src="./images/tars.png">
-</picture>
-
-<br/>
-
-## Introduction
-
-English | [简体中文](./README.zh-CN.md)
-
-[![](https://trendshift.io/api/badge/repositories/13584)](https://trendshift.io/repositories/13584)
-
-<b>TARS<sup>\*</sup></b> is a Multimodal AI Agent stack, currently shipping two projects: [Agent TARS](#agent-tars) and [UI-TARS-desktop](#ui-tars-desktop):
-
-<table>
-  <thead>
-    <tr>
-      <th width="50%" align="center"><a href="#agent-tars">Agent TARS</a></th>
-      <th width="50%" align="center"><a href="#ui-tars-desktop">UI-TARS-desktop</a></th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">
-        <video src="https://github.com/user-attachments/assets/c9489936-afdc-4d12-adda-d4b90d2a869d" width="50%"></video>
-      </td>
-      <td align="center">
-        <video src="https://github.com/user-attachments/assets/e0914ce9-ad33-494b-bdec-0c25c1b01a27" width="50%"></video>
-      </td>
-    </tr>
-    <tr>
-      <td align="left">
-        <b>Agent TARS</b> is a general multimodal AI Agent stack, it brings the power of GUI Agent and Vision into your terminal, computer, browser and product.
-        <br>
-        <br>
-        It primarily ships with a <a href="https://agent-tars.com/guide/basic/cli.html" target="_blank">CLI</a> and <a href="https://agent-tars.com/guide/basic/web-ui.html" target="_blank">Web UI</a> for usage.
-        It aims to provide a workflow that is closer to human-like task completion through cutting-edge multimodal LLMs and seamless integration with various real-world <a href="https://agent-tars.com/guide/basic/mcp.html" target="_blank">MCP</a> tools.
-      </td>
-      <td align="left">
-        <b>UI-TARS Desktop</b> is a desktop application that provides a native GUI Agent based on the <a href="https://github.com/bytedance/UI-TARS" target="_blank">UI-TARS</a> model.
-        <br>
-        <br>
-        It primarily ships a
-        <a href="https://github.com/bytedance/UI-TARS-desktop/blob/main/docs/quick-start.md#get-model-and-run-local-operator" target="_blank">local</a> and 
-        <a href="https://github.com/bytedance/UI-TARS-desktop/blob/main/docs/quick-start.md#run-remote-operator" target="_blank">remote</a> computer as well as browser operators.
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-## Table of Contents
-
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-
-- [News](#news)
-- [Agent TARS](#agent-tars)
-  - [Showcase](#showcase)
-  - [Core Features](#core-features)
-  - [Quick Start](#quick-start)
-  - [Documentation](#documentation)
-- [UI-TARS Desktop](#ui-tars-desktop)
-  - [Showcase](#showcase-1)
-  - [Features](#features)
-  - [Quick Start](#quick-start-1)
-- [Contributing](#contributing)
-- [License](#license)
-- [Citation](#citation)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
-## News
-
-- **\[2025-11-05\]** 🎉 We're excited to announce the release of [Agent TARS CLI v0.3.0](https://github.com/bytedance/UI-TARS-desktop/releases/tag/v0.3.0)! This version brings streaming support for multiple tools (shell commands, multi-file structured display), runtime settings with timing statistics for tool calls and deep thinking, Event Stream Viewer for data flow tracking and debugging. Additionally, it features exclusive support for [AIO agent Sandbox](https://github.com/agent-infra/sandbox) as isolated all-in-one tools execution environment.
-- **\[2025-06-25\]** We released an Agent TARS Beta and Agent TARS CLI - [Introducing Agent TARS Beta](https://agent-tars.com/blog/2025-06-25-introducing-agent-tars-beta.html), a multimodal AI agent that aims to explore a work form that is closer to human-like task completion through rich multimodal capabilities (such as GUI Agent, Vision) and seamless integration with various real-world tools.
-- **\[2025-06-12\]** - 🎁 We are thrilled to announce the release of UI-TARS Desktop v0.2.0! This update introduces two powerful new features: **Remote Computer Operator** and **Remote Browser Operator**—both completely free. No configuration required: simply click to remotely control any computer or browser, and experience a new level of convenience and intelligence.
-- **\[2025-04-17\]** - 🎉 We're thrilled to announce the release of new UI-TARS Desktop application v0.1.0, featuring a redesigned Agent UI. The application enhances the computer using experience, introduces new browser operation features, and supports [the advanced UI-TARS-1.5 model](https://seed-tars.com/1.5) for improved performance and precise control.
-- **\[2025-02-20\]** - 📦 Introduced [UI TARS SDK](./docs/sdk.md), is a powerful cross-platform toolkit for building GUI automation agents.
-- **\[2025-01-23\]** - 🚀 We updated the **[Cloud Deployment](./docs/deployment.md#cloud-deployment)** section in the 中文版: [GUI模型部署教程](https://bytedance.sg.larkoffice.com/docx/TCcudYwyIox5vyxiSDLlgIsTgWf#U94rdCxzBoJMLex38NPlHL21gNb) with new information related to the ModelScope platform. You can now use the ModelScope platform for deployment.
-
-<br>
-
-## Agent TARS
-
-<p>
-    <a href="https://npmjs.com/package/@agent-tars/cli?activeTab=readme"><img src="https://img.shields.io/npm/v/@agent-tars/cli?style=for-the-badge&colorA=1a1a2e&colorB=3B82F6&logo=npm&logoColor=white" alt="npm version" /></a>
-    <a href="https://npmcharts.com/compare/@agent-tars/cli?minimal=true"><img src="https://img.shields.io/npm/dm/@agent-tars/cli.svg?style=for-the-badge&colorA=1a1a2e&colorB=0EA5E9&logo=npm&logoColor=white" alt="downloads" /></a>
-    <a href="https://nodejs.org/en/about/previous-releases"><img src="https://img.shields.io/node/v/@agent-tars/cli.svg?style=for-the-badge&colorA=1a1a2e&colorB=06B6D4&logo=node.js&logoColor=white" alt="node version"></a>
-    <a href="https://discord.gg/HnKcSBgTVx"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Community" /></a>
-    <a href="https://twitter.com/agent_tars"><img src="https://img.shields.io/badge/Twitter-Follow%20%40agent__tars-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Official Twitter" /></a>
-    <a href="https://applink.larkoffice.com/client/chat/chatter/add_by_link?link_token=deen76f4-ea3c-4964-93a3-78f126f39651"><img src="https://img.shields.io/badge/飞书群-加入交流群-00D4AA?style=for-the-badge&logo=lark&logoColor=white" alt="飞书交流群" /></a>
-    <a href="https://deepwiki.com/bytedance/UI-TARS-desktop"><img src="https://img.shields.io/badge/DeepWiki-Ask%20AI-8B5CF6?style=for-the-badge&logo=gitbook&logoColor=white" alt="Ask DeepWiki" /></a>
-</p>
-
-<b>Agent TARS</b> is a general multimodal AI Agent stack, it brings the power of GUI Agent and Vision into your terminal, computer, browser and product. <br> <br>
-It primarily ships with a <a href="https://agent-tars.com/guide/basic/cli.html" target="_blank">CLI</a> and <a href="https://agent-tars.com/guide/basic/web-ui.html" target="_blank">Web UI</a> for usage.
-It aims to provide a workflow that is closer to human-like task completion through cutting-edge multimodal LLMs and seamless integration with various real-world <a href="https://agent-tars.com/guide/basic/mcp.html" target="_blank">MCP</a> tools.
-
-### Showcase
-
-```
-Please help me book the earliest flight from San Jose to New York on September 1st and the last return flight on September 6th on Priceline
-```
-
-https://github.com/user-attachments/assets/772b0eef-aef7-4ab9-8cb0-9611820539d8
-
-<br>
-
-<table>
-  <thead>
-    <tr>
-      <th width="50%" align="center">Booking Hotel</th>
-      <th width="50%" align="center">Generate Chart with extra MCP Servers</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">
-        <video src="https://github.com/user-attachments/assets/c9489936-afdc-4d12-adda-d4b90d2a869d" width="50%"></video>
-      </td>
-      <td align="center">
-        <video src="https://github.com/user-attachments/assets/a9fd72d0-01bb-4233-aa27-ca95194bbce9" width="50%"></video>
-      </td>
-    </tr>
-    <tr>
-      <td align="left">
-        <b>Instruction:</b> <i>I am in Los Angeles from September 1st to September 6th, with a budget of $5,000. Please help me book a Ritz-Carlton hotel closest to the airport on booking.com and compile a transportation guide for me</i>
-      </td>
-      <td align="left">
-        <b>Instruction:</b> <i>Draw me a chart of Hangzhou's weather for one month</i>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-For more use cases, please check out [#842](https://github.com/bytedance/UI-TARS-desktop/issues/842).
-
-### Core Features
-
-- 🖱️ **One-Click Out-of-the-box CLI** - Supports both **headful** [Web UI](https://agent-tars.com/guide/basic/web-ui.html) and **headless** [server](https://agent-tars.com/guide/advanced/server.html) [execution](https://agent-tars.com/guide/basic/cli.html).
-- 🌐 **Hybrid Browser Agent** - Control browsers using [GUI Agent](https://agent-tars.com/guide/basic/browser.html#visual-grounding), [DOM](https://agent-tars.com/guide/basic/browser.html#dom), or a hybrid strategy.
-- 🔄 **Event Stream** - Protocol-driven Event Stream drives [Context Engineering](https://agent-tars.com/beta#context-engineering) and [Agent UI](https://agent-tars.com/blog/2025-06-25-introducing-agent-tars-beta.html#easy-to-build-applications).
-- 🧰 **MCP Integration** - The kernel is built on MCP and also supports mounting [MCP Servers](https://agent-tars.com/guide/basic/mcp.html) to connect to real-world tools.
-
-### Quick Start
-
-<img alt="Agent TARS CLI" src="https://agent-tars.com/agent-tars-cli.png">
-
-```bash
-# Launch with `npx`.
-npx @agent-tars/cli@latest
-
-# Install globally, required Node.js >= 22
-npm install @agent-tars/cli@latest -g
-
-# Run with your preferred model provider
-agent-tars --provider volcengine --model doubao-1-5-thinking-vision-pro-250428 --apiKey your-api-key
-agent-tars --provider anthropic --model claude-3-7-sonnet-latest --apiKey your-api-key
-```
-
-Visit the comprehensive [Quick Start](https://agent-tars.com/guide/get-started/quick-start.html) guide for detailed setup instructions.
-
-### Documentation
-
-> 🌟 **Explore Agent TARS Universe** 🌟
-
-<table>
-  <thead>
-    <tr>
-      <th width="20%" align="center">Category</th>
-      <th width="30%" align="center">Resource Link</th>
-      <th width="50%" align="left">Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">🏠 <strong>Central Hub</strong></td>
-      <td align="center">
-        <a href="https://agent-tars.com">
-          <img src="https://img.shields.io/badge/Visit-Website-4F46E5?style=for-the-badge&logo=globe&logoColor=white" alt="Website" />
-        </a>
-      </td>
-      <td align="left">Your gateway to Agent TARS ecosystem</td>
-    </tr>
-      <tr>
-      <td align="center">📚 <strong>Quick Start</strong></td>
-      <td align="center">
-        <a href="https://agent-tars.com/guide/get-started/quick-start.html">
-          <img src="https://img.shields.io/badge/Get-Started-06B6D4?style=for-the-badge&logo=rocket&logoColor=white" alt="Quick Start" />
-        </a>
-      </td>
-      <td align="left">Zero to hero in 5 minutes</td>
-    </tr>
-    <tr>
-      <td align="center">🚀 <strong>What's New</strong></td>
-      <td align="center">
-        <a href="https://agent-tars.com/beta">
-          <img src="https://img.shields.io/badge/Read-Blog-F59E0B?style=for-the-badge&logo=rss&logoColor=white" alt="Blog" />
-        </a>
-      </td>
-      <td align="left">Discover cutting-edge features & vision</td>
-    </tr>
-    <tr>
-      <td align="center">🛠️ <strong>Developer Zone</strong></td>
-      <td align="center">
-        <a href="https://agent-tars.com/guide/get-started/introduction.html">
-          <img src="https://img.shields.io/badge/View-Docs-10B981?style=for-the-badge&logo=gitbook&logoColor=white" alt="Docs" />
-        </a>
-      </td>
-      <td align="left">Master every command & features</td>
-    </tr>
-    <tr>
-      <td align="center">🎯 <strong>Showcase</strong></td>
-      <td align="center">
-        <a href="https://github.com/bytedance/UI-TARS-desktop/issues/842">
-          <img src="https://img.shields.io/badge/View-Examples-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Examples" />
-        </a>
-      </td>
-      <td align="left">View use cases built by the official and community</td>
-    </tr>
-    <tr>
-      <td align="center">🔧 <strong>Reference</strong></td>
-      <td align="center">
-        <a href="https://agent-tars.com/api/">
-          <img src="https://img.shields.io/badge/API-Reference-EF4444?style=for-the-badge&logo=book&logoColor=white" alt="API" />
-        </a>
-      </td>
-      <td align="left">Complete technical reference</td>
-    </tr>
-  </tbody>
-</table>
-
-<br/>
-<br/>
-<br/>
-
-## UI-TARS Desktop
-
-<p align="center">
-  <img alt="UI-TARS" width="260" src="./apps/ui-tars/resources/icon.png">
-</p>
-
-UI-TARS Desktop is a native GUI agent for your local computer, driven by [UI-TARS](https://github.com/bytedance/UI-TARS) and Seed-1.5-VL/1.6 series models.
-
 <div align="center">
-<p>
-        &nbsp&nbsp 📑 <a href="https://arxiv.org/abs/2501.12326">Paper</a> &nbsp&nbsp
-        | 🤗 <a href="https://huggingface.co/ByteDance-Seed/UI-TARS-1.5-7B">Hugging Face Models</a>&nbsp&nbsp
-        | &nbsp&nbsp🫨 <a href="https://discord.gg/pTXwYVjfcs">Discord</a>&nbsp&nbsp
-        | &nbsp&nbsp🤖 <a href="https://www.modelscope.cn/collections/UI-TARS-bccb56fa1ef640">ModelScope</a>&nbsp&nbsp
-<br>
-🖥️ Desktop Application &nbsp&nbsp
-| &nbsp&nbsp 👓 <a href="https://github.com/web-infra-dev/midscene">Midscene (use in browser)</a> &nbsp&nbsp
-</p>
+  <img src="./design/cyrvis-logo/v4/cyrvis-app-icon.png" width="120" alt="CYRVIS" />
+  <h1>CYRVIS</h1>
+  <p><strong>A voice-first desktop agent.</strong><br />Say it. It listens, sees, and acts.</p>
 
+  <p>
+    <a href="./README.zh-CN.md">简体中文</a> ·
+    <a href="./README.cyrvis.md">Technical overview (中文)</a> ·
+    <a href="./doc/README.md">Documentation</a>
+  </p>
+
+  <p>
+    <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" />
+    <img alt="Platforms: macOS and Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" />
+    <img alt="Node.js 22+" src="https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg" />
+    <img alt="Status: active development" src="https://img.shields.io/badge/status-active%20development-orange.svg" />
+  </p>
 </div>
 
-### Showcase
+> **CYRVIS is an independent project.** It is built on the open-source
+> [UI-TARS Desktop](https://github.com/bytedance/UI-TARS-desktop) runtime, but it is
+> **not** an official ByteDance or UI-TARS product. The upstream README is preserved at
+> [README.upstream.md](./README.upstream.md).
 
-<!-- // FIXME: Choose only two demo, one local computer and one remote computer showcase. -->
+![CYRVIS desktop UI](./design/cyrvis-ui-refresh/new-chat.png)
 
-|                                                          Instruction                                                           |                                                Local Operator                                                |                                               Remote Operator                                                |
-| :----------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------: |
-| Please help me open the autosave feature of VS Code and delay AutoSave operations for 500 milliseconds in the VS Code setting. | <video src="https://github.com/user-attachments/assets/e0914ce9-ad33-494b-bdec-0c25c1b01a27" height="300" /> | <video src="https://github.com/user-attachments/assets/01e49b69-7070-46c8-b3e3-2aaaaec71800" height="300" /> |
-|                    Could you help me check the latest open issue of the UI-TARS-Desktop project on GitHub?                     | <video src="https://github.com/user-attachments/assets/3d159f54-d24a-4268-96c0-e149607e9199" height="300" /> | <video src="https://github.com/user-attachments/assets/072fb72d-7394-4bfa-95f5-4736e29f7e58" height="300" /> |
+## What is CYRVIS?
 
-### Features
+CYRVIS turns your desktop into a conversational workspace. Instead of typing a prompt
+into a chat box and copying the answer somewhere else, you speak to a companion that can
+**see the screen, operate apps, write code, compare real-world options, and verify the
+result**.
 
-- 🤖 Natural language control powered by Vision-Language Model
-- 🖥️ Screenshot and visual recognition support
-- 🎯 Precise mouse and keyboard control
-- 💻 Cross-platform support (Windows/MacOS/Browser)
-- 🔄 Real-time feedback and status display
-- 🔐 Private and secure - fully local processing
+It is not a voice wrapper around a chatbot. A realtime voice model, a GUI agent, a coding
+agent, and deterministic tools share one task state and one context.
 
-### Quick Start
+> Ask for an outcome, not a sequence of clicks.
 
-See [Quick Start](./docs/quick-start.md)
+## Highlights
+
+- **Real-time conversation** — speak naturally and hear a response without waiting for a
+  full ASR → LLM → TTS round trip.
+- **Interruptible by design** — say “停” / “停一下” to stop speech immediately. A local
+  keyword model and speaker-echo guard keep the assistant from interrupting itself.
+- **Desktop control** — CYRVIS sees the screen and can move the mouse, type, open apps,
+  and navigate the browser through the UI-TARS GUI agent.
+- **A coding agent with a workspace** — creates and edits files, runs Python/Node tests,
+  opens the result in VS Code, and can run visual scripts such as turtle animations.
+- **Live travel comparison** — understands “compare flights, then book the cheapest”,
+  queries Google Flights plus Ctrip/Trip.com, compares total prices, and opens the best
+  result.
+- **Companion context** — system state, recent files, gaze-aware suggestions, proactive
+  nudges, and long-term memory are available as experimental modules.
+- **Runs locally** — the Electron app, microphone capture, echo guard, and task runtime
+  run on your machine. You choose the model providers and keep the keys.
+
+## See it in action
+
+| You say                                                 | CYRVIS does                                                                                                             |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| “帮我看一下这个报错，直接修掉”                          | Reads the visible editor, plans the fix, edits the file, and runs the relevant test.                                    |
+| “香港到三亚，下周五，比一下机票”                        | Runs a ticket-first flight comparison across Google Flights, Ctrip, and Trip.com, then opens the cheapest booking page. |
+| “在桌面创建 heart.py，用 turtle 画一个红色爱心，慢慢画” | Writes the file, opens it in VS Code, and launches the turtle window so you can watch the drawing.                      |
+| “停” / “停一下”                                         | Stops the current speech immediately; an explicit stop also cancels the running task.                                   |
+| “我刚才那个文件放哪了？”                                | Uses task and system context to answer with the recent file path.                                                       |
+
+## How it works
+
+```mermaid
+flowchart LR
+  Mic[Microphone] --> Voice[Realtime voice model]
+  Voice <--> Brain[VoiceBrain]
+  Brain --> Router[Intent and tool router]
+  Router --> Controller[CyrvisController]
+  Controller --> Adapter[Electron GUI adapter]
+  Adapter --> TARS[UI-TARS GUI agent]
+  TARS --> Desktop[Desktop apps and browser]
+
+  Router --> Fast[Fast tool matrix]
+  Fast --> Travel[Travel and flight comparison]
+  Fast --> Code[Coding agent]
+  Fast --> System[System, files, and memory]
+
+  Brain --> Guard[KWS and speaker-echo guard]
+```
+
+The core loop is:
+
+```text
+Voice Agent (Qwen Realtime)
+        ↕
+     VoiceBrain
+        ↕
+  CyrvisController
+        ↕
+ Electron GUI Adapter
+        ↕
+  UI-TARS GUIAgent
+```
+
+`VoiceBrain` decides whether a turn is conversation, a desktop task, a coding task, or a
+deterministic tool call. `CyrvisController` owns the single-task state machine. Fast tools
+handle things that should not be left to a vision model, such as flight-price comparison
+and file operations.
+
+## Quick start
+
+### Requirements
+
+- Node.js **22+**
+- pnpm **9.10+**
+- macOS 13+ or Windows 10/11
+- A working microphone
+- API keys for a realtime voice model and a vision-language model
+- Optional: Python 3.10+ for the live flight worker
+
+### Install
+
+```bash
+git clone https://github.com/rain2create/Cyrvis.git
+cd Cyrvis
+PUPPETEER_SKIP_DOWNLOAD=1 pnpm install
+```
+
+`PUPPETEER_SKIP_DOWNLOAD=1` avoids downloading a bundled Chromium; the browser operator
+uses your system Chrome/Edge.
+
+### Configure
+
+```bash
+cp apps/ui-tars/.env.example apps/ui-tars/.env
+```
+
+Edit `apps/ui-tars/.env` and provide at least:
+
+```env
+QWEN_API_KEY=<your-realtime-key>
+QWEN_MODEL=<realtime-model-id>
+QWEN_REALTIME_URL=<realtime-websocket-url>
+
+CONVERSATION_BASE_URL=<openai-compatible-chat-endpoint>
+CONVERSATION_MODEL_NAME=<chat-model-id>
+
+VLM_PROVIDER=<vision-provider-name>
+VLM_BASE_URL=<vision-api-endpoint>
+VLM_MODEL_NAME=<vision-model-id>
+VLM_API_KEY=<vision-api-key>
+```
+
+The exact model IDs depend on your provider. See
+[apps/ui-tars/.env.example](./apps/ui-tars/.env.example) and
+[doc/development.md](./doc/development.md) for the provider-specific setup, including
+Volcengine Ark, Qwen Realtime, and the coding agent.
+
+> Never commit `.env` or logs. They are ignored by git for a reason.
+
+### Run
+
+```bash
+pnpm run dev:ui-tars
+```
+
+On macOS you can also double-click [`start-cyrvis.command`](./start-cyrvis.command).
+On Windows, use `scripts/cyrvis/start-dev.cmd`.
+
+On first launch:
+
+1. Grant microphone, screen-recording, and accessibility permissions.
+2. Configure the GUI vision model in Settings.
+3. Pick a physical microphone and an output device (headset or MacBook speakers).
+
+## What works today
+
+| Area                                             | Status       |
+| ------------------------------------------------ | ------------ |
+| Realtime voice conversation and barge-in         | Working      |
+| Desktop GUI tasks through UI-TARS                | Working      |
+| Coding agent: workspace, VS Code, visual scripts | Working      |
+| Live flight comparison across three sources      | Working      |
+| macOS speaker/headset routing                    | Working      |
+| Gaze, proactivity, and long-term memory          | Experimental |
+| Linux desktop                                    | Not yet      |
+
+CYRVIS is under active development. Model endpoints, audio devices, and OS permissions
+are the usual sources of sharp edges; the [findings](./doc/findings.md) document records
+what we have already debugged.
+
+## Repository map
+
+```text
+apps/ui-tars/src/main/cyrvis/        VoiceBrain, controller, tools, travel, coding
+apps/ui-tars/src/main/cyrvis/voice/  Realtime voice providers
+apps/ui-tars/resources/cyrvis/       Coding, flight, and browser workers
+doc/                                 CYRVIS architecture and operations docs
+design/                              Brand, UI, and companion assets
+scripts/cyrvis/                      Launch and development helpers
+```
+
+## Documentation
+
+| Document                                                 | What it covers                                             |
+| -------------------------------------------------------- | ---------------------------------------------------------- |
+| [README.cyrvis.md](./README.cyrvis.md)                   | Detailed Chinese technical overview                        |
+| [doc/README.md](./doc/README.md)                         | Documentation index and code map                           |
+| [doc/architecture.md](./doc/architecture.md)             | Layers, state machine, and interfaces                      |
+| [doc/voice-architecture.md](./doc/voice-architecture.md) | Microphone/playback processes, barge-in, and echo handling |
+| [doc/fast-tool-matrix.md](./doc/fast-tool-matrix.md)     | Fast tools, routing, safety, and MCP                       |
+| [doc/development.md](./doc/development.md)               | Environment, keys, tests, logs, and troubleshooting        |
+| [doc/roadmap.md](./doc/roadmap.md)                       | GUI acceleration, MCP, gaze, proactivity, and memory       |
+| [doc/progress.md](./doc/progress.md)                     | What has been built, in chronological order                |
+
+## Built on UI-TARS, maintained as CYRVIS
+
+UI-TARS Desktop provides the GUI-agent runtime and vision-model integration. CYRVIS adds
+the realtime voice brain, controller, companion layer, coding and travel tools, and macOS
+polish.
+
+- Upstream project: [bytedance/UI-TARS-desktop](https://github.com/bytedance/UI-TARS-desktop)
+- Upstream README: [README.upstream.md](./README.upstream.md)
+- CYRVIS is independent and is **not affiliated with or endorsed by ByteDance**.
+- The upstream license and copyright notices are preserved.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before
+opening a PR, and never include API keys, logs, or personal paths in an issue.
+
+If CYRVIS is useful to you, a star helps others find it.
 
 ## License
 
-This project is licensed under the Apache License 2.0.
-
-## Citation
-
-If you find our paper and code useful in your research, please consider giving a star :star: and citation :pencil:
-
-```BibTeX
-@article{qin2025ui,
-  title={UI-TARS: Pioneering Automated GUI Interaction with Native Agents},
-  author={Qin, Yujia and Ye, Yining and Fang, Junjie and Wang, Haoming and Liang, Shihao and Tian, Shizuo and Zhang, Junda and Li, Jiahao and Li, Yunxin and Huang, Shijue and others},
-  journal={arXiv preprint arXiv:2501.12326},
-  year={2025}
-}
-```
+Apache License 2.0. See [LICENSE](./LICENSE).
