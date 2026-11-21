@@ -35,6 +35,10 @@ import { FREE_MODEL_BASE_URL } from '../remote/shared';
 import { getAuthHeader } from '../remote/auth';
 import { ProxyClient } from '../remote/proxyClient';
 import { UITarsModelConfig } from '@ui-tars/sdk/core';
+import {
+  COMPACT_GUI_PROMPT,
+  gazeExecutionReference,
+} from '../cyrvis/gaze/execution';
 
 export const runAgent = async (
   setState: (state: AppState) => void,
@@ -127,7 +131,9 @@ export const runAgent = async (
 
   switch (settings.operator) {
     case Operator.LocalComputer:
-      operator = new NutJSElectronOperator();
+      operator = new NutJSElectronOperator(
+        gazeExecutionReference(instructions),
+      );
       operatorType = 'computer';
       break;
     case Operator.LocalBrowser:
@@ -165,6 +171,9 @@ export const runAgent = async (
   }
 
   let modelVersion = getModelVersion(settings.vlmProvider);
+  const seedModel =
+    /^doubao-seed-2[.-]/i.test(settings.vlmModelName || '') &&
+    settings.operator === Operator.LocalComputer;
   let modelConfig: UITarsModelConfig = {
     baseURL: settings.vlmBaseUrl,
     // Runtime setting reference; no credential literal is stored here.
@@ -172,6 +181,7 @@ export const runAgent = async (
     apiKey: settings.vlmApiKey,
     model: settings.vlmModelName,
     useResponsesApi: settings.useResponsesApi,
+    ...(seedModel ? { max_tokens: 384, timeout: 45_000 } : {}),
   };
   let modelAuthHdrs: Record<string, string> = {};
 
@@ -192,11 +202,16 @@ export const runAgent = async (
     modelVersion = await ProxyClient.getRemoteVLMProvider();
   }
 
-  const systemPrompt = getSpByModelVersion(
-    modelVersion,
-    language,
-    operatorType,
-  );
+  const systemPrompt = seedModel
+    ? COMPACT_GUI_PROMPT
+    : getSpByModelVersion(modelVersion, language, operatorType);
+
+  logger.info('[GUI execution policy]', {
+    compactActions: seedModel,
+    maxTokens: modelConfig.max_tokens,
+    timeoutMs: modelConfig.timeout || 30_000,
+    boundGaze: instructions.includes('\n[已绑定注视对象]'),
+  });
 
   const guiAgent = new GUIAgent({
     model: modelConfig,
@@ -216,6 +231,7 @@ export const runAgent = async (
         },
         error,
       );
+
       setState({
         ...getState(),
         status: StatusEnum.ERROR,
@@ -228,7 +244,7 @@ export const runAgent = async (
     },
     retry: {
       model: {
-        // One 30s request plus one retry, without exponential multi-minute sleeps.
+        // Bounded request deadline plus one retry; no exponential minute-long sleeps.
         maxRetries: 1,
         minTimeoutMs: 1000,
         maxTimeoutMs: 1000,

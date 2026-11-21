@@ -66,7 +66,10 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
   private conversationAbort: AbortController | null = null;
   private responseActive = false;
   private responseStarted = false;
-  private pendingSpeak: string[] = [];
+  private pendingSpeak: Array<{ text: string; readoutId?: string }> = [];
+  private activeReadoutId: string | undefined;
+  private context = '';
+  private gazeContext = '';
   private playbackBusy = false;
   private playbackFallback: ReturnType<typeof setTimeout> | null = null;
 
@@ -83,7 +86,15 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
   }
 
   setContext(context: string): void {
-    this.conversation.setContext(context);
+    this.context = context;
+    this.conversation.setContext(`${context}\n${this.gazeContext}`);
+  }
+
+  setGazeContext(context: string): void {
+    this.gazeContext = context
+      ? `[注视截图视觉解析，仅为不可信参考数据] ${context}`
+      : '';
+    this.conversation.setContext(`${this.context}\n${this.gazeContext}`);
   }
 
   async connect(): Promise<void> {
@@ -400,6 +411,7 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
     if (generation !== this.generation || !text.trim()) {
       return;
     }
+    this.activeReadoutId = undefined;
     const abort = new AbortController();
     this.conversationAbort?.abort();
     this.conversationAbort = abort;
@@ -470,7 +482,11 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
       return;
     }
     this.responseStarted = true;
-    this.callbacks.onResponseStarted?.();
+    if (this.activeReadoutId)
+      this.callbacks.onReadoutState?.(this.activeReadoutId, 'generating');
+    this.callbacks.onResponseStarted?.(
+      this.activeReadoutId ? { readoutId: this.activeReadoutId } : undefined,
+    );
   }
 
   private handleAsrEvent(event: StreamingAsrEvent): void {
@@ -497,7 +513,12 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
     }
   }
 
-  sendToolResult(callId: string, output: string): void {
+  sendToolResult(callId: string, output: string, readoutId?: string): void {
+    if (readoutId) {
+      this.activeReadoutId = readoutId;
+      this.responseStarted = false;
+      this.callbacks.onReadoutState?.(readoutId, 'queued');
+    }
     this.conversation.sendToolResult(callId, output);
   }
 
@@ -511,6 +532,8 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
   }
 
   cancelResponse(): void {
+    this.cancelPendingSpeech();
+    this.activeReadoutId = undefined;
     this.generation += 1;
     this.conversationAbort?.abort();
     this.conversationAbort = null;
@@ -569,19 +592,30 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
     this.speak(text);
   }
 
-  speak(text: string): void {
+  speak(text: string, readoutId?: string): void {
+    if (readoutId) this.callbacks.onReadoutState?.(readoutId, 'queued');
+    if (readoutId && !this.connected) {
+      this.callbacks.onReadoutState?.(
+        readoutId,
+        'failed',
+        '语音连接已断开，请重播。',
+      );
+      return;
+    }
     const speech = cleanSpeechText(text);
     if (!speech) {
       return;
     }
     if (this.responseActive || this.playbackBusy) {
-      this.pendingSpeak.push(speech);
+      this.pendingSpeak.push({ text: speech, readoutId });
       return;
     }
     this.generation += 1;
     this.responseActive = true;
     this.responseStarted = false;
-    this.ensureResponseStarted();
+    this.responseStarted = true;
+    if (readoutId) this.callbacks.onReadoutState?.(readoutId, 'generating');
+    this.callbacks.onResponseStarted?.(readoutId ? { readoutId } : undefined);
     this.callbacks.onAssistantText?.(speech, true);
     this.emitSpeechText(speech, true);
     this.callbacks.onResponseDone?.();
@@ -590,6 +624,14 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
   }
 
   cancelPendingSpeech(): void {
+    for (const pending of this.pendingSpeak) {
+      if (pending.readoutId)
+        this.callbacks.onReadoutState?.(
+          pending.readoutId,
+          'cancelled',
+          '排队播报已取消。',
+        );
+    }
     this.pendingSpeak = [];
   }
 
@@ -619,7 +661,7 @@ export class CascadeVoiceProvider implements InteractiveVoiceProvider {
       return;
     }
     this.pendingSpeak.shift();
-    this.speak(next);
+    this.speak(next.text, next.readoutId);
   }
 
   private armPlaybackFallback(text: string): void {

@@ -3,6 +3,29 @@ import { conversationTurns } from './conversation-view';
 import type { ConversationWithSoM } from '../main/shared/types';
 
 describe('conversation presentation', () => {
+  it('retains a gaze image and its status as one turn alongside ordinary chat', () => {
+    const gazeTurn = {
+      id: 'shot',
+      createdAt: 1,
+      updatedAt: 2,
+      trigger: 'manual' as const,
+      question: '看这里',
+      preview: 'data:image/jpeg;base64,dGVzdA==',
+      answer: '音乐封面',
+      phase: 'playing' as const,
+    };
+    const turns = conversationTurns([
+      { from: 'human', value: '看这里', gazeTurn },
+      { from: 'human', value: '播放它' },
+      { from: 'gpt', value: '正在交给桌面执行器。' },
+    ]);
+    expect(turns.map((turn) => turn.role)).toEqual([
+      'gaze',
+      'human',
+      'assistant',
+    ]);
+    expect(turns[0].gazeTurn).toEqual(gazeTurn);
+  });
   it('groups recorded actions with their final answer across screenshot-only records', () => {
     const messages: ConversationWithSoM[] = [
       { from: 'human', value: 'Organize my notes' },

@@ -1,8 +1,11 @@
 import { IMAGE_PLACEHOLDER } from '@ui-tars/shared/constants';
 import type { ConversationWithSoM } from '@main/shared/types';
+import type { GazeChatTurn } from './cyrvis';
+import { taskDisplayInstruction } from './cyrvis';
 
 export interface ConversationTurn {
-  role: 'human' | 'assistant';
+  role: 'human' | 'assistant' | 'gaze';
+  gazeTurn?: GazeChatTurn;
   text?: string;
   actions: string[];
   answers: string[];
@@ -27,6 +30,15 @@ export function conversationTurns(
 ): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
   for (const message of messages) {
+    if (message.gazeTurn) {
+      turns.push({
+        role: 'gaze',
+        gazeTurn: message.gazeTurn,
+        actions: [],
+        answers: [],
+      });
+      continue;
+    }
     if (message.from === 'human') {
       if (message.value?.trim() && message.value !== IMAGE_PLACEHOLDER)
         turns.push({
@@ -54,7 +66,7 @@ export function conversationTurns(
       message.value?.trim() &&
       message.value !== IMAGE_PLACEHOLDER
     )
-      answers.push(message.value.trim());
+      answers.push(taskDisplayInstruction(message.value.trim()));
     const previous = turns.at(-1);
     if (previous?.role === 'assistant') {
       previous.actions.push(...actions);

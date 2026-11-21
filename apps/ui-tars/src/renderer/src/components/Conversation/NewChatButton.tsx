@@ -33,6 +33,7 @@ export function NewChatButton({ className }: { className?: string }) {
       // Keep this as a draft route. The session is created only when the user
       // sends the first non-empty message.
       await api.clearHistory();
+      window.dispatchEvent(new Event('cyrvis:new-chat'));
       const store = useSessionStore.getState();
       store.setCurrentSessionId('');
       store.setChatMessages([]);

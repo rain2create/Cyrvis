@@ -409,13 +409,12 @@ describe('unified navigation', () => {
         name: 'create_text_file',
         args: { path: file, content: '1\n2\n3', open: true },
       });
-      await flush();
-      await flush();
-      await flush();
-
-      await vi.waitFor(async () => {
-        expect(await fs.readFile(file, 'utf8')).toBe('1\n2\n3');
-      });
+      // File I/O may outlive several event-loop ticks under parallel suites.
+      // Wait for the actual tool receipt before reading or removing its output.
+      await vi.waitFor(() =>
+        expect(x.provider.toolResults.at(-1)?.output).toContain('FILE_CREATED'),
+      );
+      expect(await fs.readFile(file, 'utf8')).toBe('1\n2\n3');
       expect(x.adapter.started).toBe(false);
       await vi.waitFor(() => {
         expect(x.provider.toolResults.at(-1)?.output).toContain('FILE_CREATED');

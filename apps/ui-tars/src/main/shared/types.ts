@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { Conversation } from '@ui-tars/shared/types';
+import type { GazeChatTurn } from '@shared/cyrvis';
 
 export interface ConversationWithSoM extends Conversation {
+  gazeTurn?: GazeChatTurn;
   screenshotBase64WithElementMarker?: string;
 }

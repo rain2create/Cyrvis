@@ -61,6 +61,8 @@ export interface CyrvisVoiceState {
   awake: boolean;
   userSpeaking: boolean;
   ttsSpeaking: boolean;
+  /** Gaze readouts ignore energy-only echo; explicit stop/KWS still works. */
+  readoutGuardUntil?: number;
   lastUserText: string;
   task: TaskSnapshot;
 }
@@ -88,6 +90,29 @@ export type VoiceToolName =
   | 'create_presentation';
 
 export type CyrvisMemoryTurnRole = 'user' | 'assistant';
+
+export type GazeChatPhase =
+  | 'capturing'
+  | 'recognizing'
+  | 'recognized'
+  | 'queued'
+  | 'generating'
+  | 'audio'
+  | 'playing'
+  | 'spoken'
+  | 'failed'
+  | 'cancelled';
+export interface GazeChatTurn {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  trigger: 'manual' | 'proactive';
+  question: string;
+  preview?: string;
+  answer?: string;
+  phase: GazeChatPhase;
+  error?: string;
+}
 
 export interface CyrvisMemoryTurn {
   id: string;
@@ -153,6 +178,17 @@ const TERMINAL_TASK_STATUSES: TaskStatus[] = [
   'cancelled',
 ];
 
+/** User-facing task titles must not expose generated gaze JSON/instructions. */
+export function taskDisplayInstruction(instruction: string): string {
+  const marker = instruction.indexOf('\n[已绑定注视对象]');
+  return marker < 0
+    ? instruction
+    : instruction
+        .slice(0, marker)
+        .replace(/^用户明确要求在当前桌面界面执行操作：/, '')
+        .trim();
+}
+
 export const isActiveTaskStatus = (status: TaskStatus): boolean =>
   !TERMINAL_TASK_STATUSES.includes(status);
 
@@ -164,7 +200,9 @@ export const describeVoiceToolCall = (
     case 'inspect_gaze_target':
       return '识别当前注视区域';
     case 'start_gui_task':
-      return instruction ? `启动电脑任务：${instruction}` : '启动电脑任务';
+      return instruction
+        ? `启动电脑任务：${taskDisplayInstruction(instruction)}`
+        : '启动电脑任务';
     case 'cancel_gui_task':
       return '取消电脑任务';
     case 'pause_gui_task':
@@ -211,7 +249,7 @@ export const describeControllerEvent = (
 ): string | null => {
   switch (event.type) {
     case 'task_started':
-      return `开始任务：${event.instruction}`;
+      return `开始任务：${taskDisplayInstruction(event.instruction)}`;
     case 'task_executing':
       return 'GUI Agent 已开始执行';
     case 'step_update':

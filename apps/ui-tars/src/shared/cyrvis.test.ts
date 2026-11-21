@@ -4,10 +4,19 @@ import {
   describeControllerEvent,
   describeVoiceToolCall,
   isActiveTaskStatus,
+  taskDisplayInstruction,
   type ControllerEvent,
 } from './cyrvis';
 
 describe('Cyrvis shared UI model', () => {
+  it('shows the user request without generated gaze JSON or internal instructions', () => {
+    expect(
+      taskDisplayInstruction(
+        '用户明确要求在当前桌面界面执行操作：播放它\n[已绑定注视对象] reference={"objectBounds":{}}\n内部要求',
+      ),
+    ).toBe('播放它');
+    expect(taskDisplayInstruction('打开网易云音乐')).toBe('打开网易云音乐');
+  });
   it('treats only live task phases as active', () => {
     expect(isActiveTaskStatus('starting')).toBe(true);
     expect(isActiveTaskStatus('executing')).toBe(true);

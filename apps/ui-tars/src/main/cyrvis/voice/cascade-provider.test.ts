@@ -76,6 +76,30 @@ type ProviderInternals = {
 };
 
 describe('CascadeVoiceProvider turn ownership', () => {
+  it('retains screenshot IDs through the task speech queue and reports queued cancellation', () => {
+    const onResponseStarted = vi.fn();
+    const onReadoutState = vi.fn();
+    const provider = new CascadeVoiceProvider({
+      onResponseStarted,
+      onReadoutState,
+    });
+    (provider as unknown as ProviderInternals).connected = true;
+    provider.speak('当前任务进度。');
+    provider.speak('第一张封面。', 'shot-a');
+    provider.speak('第二张封面。', 'shot-b');
+    provider.notifyPlaybackIdle();
+    expect(onResponseStarted).toHaveBeenLastCalledWith({ readoutId: 'shot-a' });
+    provider.cancelPendingSpeech();
+    expect(onReadoutState).toHaveBeenCalledWith(
+      'shot-b',
+      'cancelled',
+      expect.any(String),
+    );
+    provider.notifyPlaybackIdle();
+    expect(onResponseStarted).toHaveBeenCalledTimes(2);
+    provider.close();
+  });
+
   it('routes a confirmed text request through the normal conversation pipeline', async () => {
     const provider = new CascadeVoiceProvider({});
     const internals = provider as unknown as ProviderInternals;

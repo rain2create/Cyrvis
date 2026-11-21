@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { assistantCaptureActive } from './capture';
 import {
   BrowserWindow,
   app,
@@ -303,6 +304,7 @@ function createCompanionWindow() {
   return window;
 }
 export function showCompanionWindow() {
+  if (assistantCaptureActive()) return;
   if (!app.isReady() || quitting) return;
   registerCompanionIpc();
   if (!companionWindow || companionWindow.isDestroyed())

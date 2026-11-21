@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router';
+import { Suspense } from 'react';
 import { AppSidebar } from '@/renderer/src/components/SideBar/app-sidebar';
 import {
   SidebarInset,
@@ -22,7 +23,13 @@ export function MainLayout() {
           <SidebarTrigger className="non-draggable-area" />
         </div>
         <div className="cyrvis-content">
-          <Outlet />
+          <Suspense
+            fallback={
+              <p className="p-6 text-sm text-muted-foreground">正在载入对话…</p>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </div>
       </SidebarInset>
       <VoiceRuntime />

@@ -25,6 +25,7 @@ export class WebAudioStreamPlayer {
   ) => void;
 
   private context: SinkableAudioContext | null = null;
+  private contextReady: Promise<SinkableAudioContext> | null = null;
   private gain: GainNode | null = null;
   private readonly sources = new Set<AudioBufferSourceNode>();
   private pending: Int16Array[] = [];
@@ -73,13 +74,13 @@ export class WebAudioStreamPlayer {
 
     const bufferedSeconds = this.pendingSamples / SAMPLE_RATE;
     if (bufferedSeconds >= INITIAL_BUFFER_SECONDS || this.nextStartTime > 0) {
-      void this.pump();
+      void this.pump().catch((error) => this.fail(error));
     }
   }
 
   finish(): void {
     this.finished = true;
-    void this.pump();
+    void this.pump().catch((error) => this.fail(error));
     this.maybeIdle();
   }
 
@@ -124,6 +125,7 @@ export class WebAudioStreamPlayer {
     this.sources.clear();
     const context = this.context;
     this.context = null;
+    this.contextReady = null;
     this.gain = null;
     if (context && context.state !== 'closed') {
       void context.close().catch(() => undefined);
@@ -142,29 +144,34 @@ export class WebAudioStreamPlayer {
     await context.setSinkId(deviceId);
   }
 
+  private fail(error: unknown): void {
+    this.stop(false);
+    this.onError(error);
+  }
+
   private async ensureContext(): Promise<SinkableAudioContext> {
-    if (this.context) {
-      if (this.context.state === 'suspended' && !this.paused) {
-        void this.context.resume().catch(() => undefined);
+    if (this.contextReady) {
+      const context = await this.contextReady;
+      if (context.state === 'suspended' && !this.paused) await context.resume();
+      return context;
+    }
+    this.contextReady = (async () => {
+      const context = new AudioContext() as SinkableAudioContext;
+      this.context = context;
+      this.gain = context.createGain();
+      this.gain.gain.value = 1;
+      this.gain.connect(context.destination);
+      if (this.outputDeviceId && this.outputDeviceId !== 'default') {
+        if (!context.setSinkId)
+          throw new Error('当前播放器无法选择输出设备，请改用系统默认输出。');
+        await context.setSinkId(this.outputDeviceId);
       }
-      return this.context;
-    }
-    const context = new AudioContext() as SinkableAudioContext;
-    this.context = context;
-    this.gain = context.createGain();
-    this.gain.gain.value = 1;
-    this.gain.connect(context.destination);
-    if (
-      this.outputDeviceId &&
-      this.outputDeviceId !== 'default' &&
-      context.setSinkId
-    ) {
-      await context.setSinkId(this.outputDeviceId).catch(() => undefined);
-    }
-    if (context.state === 'suspended' && !this.paused) {
-      await context.resume().catch(() => undefined);
-    }
-    return context;
+      if (context.state === 'suspended' && !this.paused) await context.resume();
+      if (context.state !== 'running' && !this.paused)
+        throw new Error('音频设备没有启动，请点击重新播报。');
+      return context;
+    })();
+    return this.contextReady;
   }
 
   private async pump(): Promise<void> {
@@ -227,7 +234,6 @@ export class WebAudioStreamPlayer {
       source.buffer = buffer;
       source.connect(this.gain!);
       const startedAt = Date.now() + (startAt - context.currentTime) * 1000;
-      this.onSegmentStart?.(samples, startedAt);
 
       this.sources.add(source);
       source.onended = () => {
@@ -244,6 +250,7 @@ export class WebAudioStreamPlayer {
 
       try {
         source.start(startAt);
+        this.onSegmentStart?.(samples, startedAt);
       } catch (error) {
         this.sources.delete(source);
         this.onError(error);
@@ -258,7 +265,7 @@ export class WebAudioStreamPlayer {
     // If more deltas arrived while awaiting the context/buffer allocation,
     // schedule them immediately after this block.
     if (this.pendingSamples > 0) {
-      void this.pump();
+      void this.pump().catch((error) => this.fail(error));
     }
   }
 

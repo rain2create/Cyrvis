@@ -15,6 +15,7 @@ import type {
   CyrvisContextSnapshot,
   CyrvisMemorySnapshot,
   CyrvisVoiceState,
+  GazeChatTurn,
   TaskSnapshot,
   VoiceToolName,
 } from '@shared/cyrvis';
@@ -211,6 +212,30 @@ const electronHandler = {
       return () => ipcRenderer.removeListener('cyrvis:voice:ptt', listener);
     },
     getState: () => ipcRenderer.invoke('cyrvis:voice:get-state'),
+    submitText: (text: string) =>
+      ipcRenderer.invoke('cyrvis:voice:submit-text', text) as Promise<{
+        ok: boolean;
+        error?: string;
+      }>,
+    getGazeTurns: () =>
+      ipcRenderer.invoke('cyrvis:gaze:chat-turns') as Promise<GazeChatTurn[]>,
+    replayGazeTurn: (id: string) =>
+      ipcRenderer.invoke('cyrvis:gaze:replay', id) as Promise<{
+        ok: boolean;
+        error?: string;
+      }>,
+    reportGazePlayback: (
+      id: string,
+      phase: 'playing' | 'spoken' | 'failed' | 'cancelled',
+      error?: string,
+    ) => ipcRenderer.send('cyrvis:gaze:playback', id, phase, error),
+    onGazeTurn: (callback: (turn: GazeChatTurn) => void) => {
+      const listener = (_event: IpcRendererEvent, turn: GazeChatTurn) =>
+        callback(turn);
+      ipcRenderer.on('cyrvis:gaze:chat-turn', listener);
+      return () =>
+        ipcRenderer.removeListener('cyrvis:gaze:chat-turn', listener);
+    },
     getMemory: () =>
       ipcRenderer.invoke(
         'cyrvis:voice:get-memory',
@@ -384,8 +409,11 @@ const electronHandler = {
       return () =>
         ipcRenderer.removeListener('cyrvis:voice:activity', listener);
     },
-    onResponseStarted: (callback: () => void) => {
-      const listener = () => callback();
+    onResponseStarted: (callback: (info?: { readoutId?: string }) => void) => {
+      const listener = (
+        _event: IpcRendererEvent,
+        info?: { readoutId?: string },
+      ) => callback(info);
       ipcRenderer.on('cyrvis:voice:response-started', listener);
       return () =>
         ipcRenderer.removeListener('cyrvis:voice:response-started', listener);

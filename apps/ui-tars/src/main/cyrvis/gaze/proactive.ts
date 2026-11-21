@@ -13,11 +13,11 @@ export interface ProactiveGazeStatus {
   retryInMs?: number;
 }
 interface Dependencies {
-  inspect: () => Promise<GazeSuggestion | null>;
+  inspect: (gaze: DesktopGaze) => Promise<GazeSuggestion | null>;
   cancel: () => void;
   canInspect: () => boolean;
   blockedReason?: () => string;
-  onSuggestion: (suggestion: GazeSuggestion) => void;
+  onSuggestion: (suggestion: GazeSuggestion) => boolean | void;
   now?: () => number;
   onEvent?: (event: string, detail?: string) => void;
 }
@@ -149,8 +149,6 @@ export class ProactiveGaze {
       return;
     }
     if (!this.deps.canInspect()) {
-      this.startedAt = now;
-      this.status.progress = 0;
       this.status.phase = 'waiting';
       this.status.detail =
         this.deps.blockedReason?.() || '等待语音空闲后继续注视计时。';
@@ -182,7 +180,13 @@ export class ProactiveGaze {
     );
     if (this.status.progress < 1) return;
     const generation = this.generation;
-    const frozen = { ...sample, bounds: { ...sample.bounds } };
+    const frozen = {
+      ...sample,
+      bounds: { ...sample.bounds },
+      ...(sample.target
+        ? { target: { ...sample.target, bounds: { ...sample.target.bounds } } }
+        : {}),
+    };
     this.busy = true;
     this.status = {
       ...this.status,
@@ -196,7 +200,7 @@ export class ProactiveGaze {
     this.nextAt = now + RETRY_PAUSE;
     this.deps.onEvent?.('trigger');
     void this.deps
-      .inspect()
+      .inspect(frozen)
       .then((suggestion) => {
         if (
           generation !== this.generation ||
@@ -271,7 +275,6 @@ export class ProactiveGaze {
       return;
     }
     const { suggestion, gaze } = pending;
-    this.pending = null;
     // Deduplicate only confirmed identities within a scene. Generic descriptions
     // and uncertain model candidates can be identical for different covers.
     const key =
@@ -282,6 +285,7 @@ export class ProactiveGaze {
         : null;
     const seenAt = key ? this.seenTargets.get(key) : undefined;
     if (seenAt !== undefined && this.now() - seenAt < SAME_TARGET_PAUSE) {
+      this.pending = null;
       this.seenPositions.push({ gaze, at: seenAt });
       this.status.phase = 'cooldown';
       this.status.detail = '这个作品刚提醒过；看向其他对象可继续识别。';
@@ -291,9 +295,18 @@ export class ProactiveGaze {
     const spoken = {
       ...suggestion,
       gaze,
-      speech: `刚才这个，${suggestion.speech}`,
     };
-    this.deps.onSuggestion(spoken);
+    // A disconnected/restarting voice transport must not count as a reminder.
+    if (this.deps.onSuggestion(spoken) === false) {
+      this.status.phase = 'waiting';
+      this.status.detail = '截图已识别完成，等待语音接收播报。';
+      this.deliveryTimer = setTimeout(() => {
+        this.deliveryTimer = null;
+        this.deliver();
+      }, 250);
+      return;
+    }
+    this.pending = null;
     this.seenPositions.push({ gaze, at: this.now() });
     if (key) this.seenTargets.set(key, this.now());
     if (this.seenTargets.size > 100)
@@ -301,8 +314,9 @@ export class ProactiveGaze {
     this.nextAt = this.now() + NEW_TARGET_PAUSE;
     this.status.phase = 'cooldown';
     this.status.suggestion = spoken;
-    this.status.detail = '已交给语音助手询问下一步；稍后可继续看其他对象。';
+    this.status.detail =
+      '语音已接收这张截图的提问，等待播放；稍后可继续看其他对象。';
     this.status.retryAt = this.nextAt;
-    this.deps.onEvent?.('announced');
+    this.deps.onEvent?.('submitted');
   }
 }

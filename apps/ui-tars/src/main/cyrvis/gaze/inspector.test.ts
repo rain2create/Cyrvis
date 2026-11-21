@@ -33,6 +33,40 @@ function setup() {
   return { deps, inspector: new GazeInspector(deps) };
 }
 describe('read-only gaze inspection', () => {
+  it('captures the frozen dwell target even if the current eye position changes', async () => {
+    const { deps, inspector } = setup();
+    inspector.setEnabled(true);
+    const frozen = {
+      ...gaze(),
+      target: {
+        id: 'cover-a',
+        scene: 'music',
+        label: '封面 A',
+        role: 'AXImage',
+        source: 'accessibility' as const,
+        bounds: { x: -800, y: 200, width: 180, height: 180 },
+      },
+    };
+    deps.getGaze.mockReturnValue({ ...gaze(), x: 0.1, y: 0.9 });
+    const pending = inspector.inspect('我刚才看的是什么', 'proactive', frozen);
+    frozen.target.label = '封面 B';
+    frozen.target.bounds.x = -200;
+    await pending;
+    expect(deps.getGaze).not.toHaveBeenCalled();
+    expect(deps.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        x: 0.8,
+        y: 0.2,
+        target: expect.objectContaining({
+          label: '封面 A',
+          bounds: expect.objectContaining({ x: -800 }),
+        }),
+      }),
+    );
+    const body = JSON.parse((deps.fetch.mock.calls[0] as any)[1].body);
+    expect(body.messages[1].content[0].text).toContain('封面 A');
+    expect(body.messages[1].content[0].text).not.toContain('封面 B');
+  });
   it('turns a visual observation into an actionable question without executing tools', async () => {
     const { deps, inspector } = setup();
     inspector.setEnabled(true);

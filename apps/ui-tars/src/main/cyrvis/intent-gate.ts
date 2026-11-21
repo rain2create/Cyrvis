@@ -17,6 +17,7 @@ const CONTROL_PATTERNS: RegExp[] = [
 ];
 
 const TASK_VERBS: RegExp[] = [
+  /(艾特|发送|转发|发(?:一个|一张|个|条).{0,8}(?:表情|消息|图片)|给.{1,12}发)/,
   /(打开|启动|关闭|关掉|搜索|搜一下|查一下|查询|点击|点一下|双击|输入|填写|保存|保存到|下载|下载到|安装|运行|操作|进入|切换到|帮我|给我|把.+|创建|新建|写入|写到|写在|生成|制作|编辑|修改|复制|移动到|删除|重命名|整理|放到|存到|解压|压缩|截图|录屏|翻译文件)/,
   /\b(open|launch|close|search|click|double|type|save|download|install|run|navigate|go to|switch to|create|write|rename|delete|copy|move|edit|modify|generate)\b/,
 ];

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProactiveGaze } from './proactive';
+import type { GazeSuggestion } from './suggestions';
 import {
   gazeActionRequest,
   parseGazeSuggestion,
@@ -28,7 +29,7 @@ function setup() {
     inspect: vi.fn(async () => music()),
     cancel: vi.fn(),
     canInspect: vi.fn(() => true),
-    onSuggestion: vi.fn(),
+    onSuggestion: vi.fn((_suggestion: GazeSuggestion): boolean | void => true),
     now: () => now,
   };
   const controller = new ProactiveGaze(deps);
@@ -56,6 +57,33 @@ function setup() {
   };
 }
 describe('proactive gaze', () => {
+  it('preserves stable dwell across a short voice-busy interval', async () => {
+    const { controller, deps, point } = setup();
+    controller.configure(true);
+    for (let at = 0; at <= 3000; at += 500) point(at);
+    deps.canInspect.mockReturnValue(false);
+    point(3500);
+    point(4000);
+    deps.canInspect.mockReturnValue(true);
+    point(4500);
+    await flush();
+    expect(deps.inspect).toHaveBeenCalledOnce();
+  });
+  it('does not cache a reminder rejected by the voice transport', async () => {
+    vi.useFakeTimers();
+    const { controller, deps, dwell } = setup();
+    deps.onSuggestion.mockReturnValue(false);
+    controller.configure(true);
+    dwell(0);
+    await flush();
+    expect(controller.getStatus().suggestion).toBeUndefined();
+    expect(controller.getStatus().phase).toBe('waiting');
+    deps.onSuggestion.mockReturnValue(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(controller.getStatus().suggestion?.target).toBe('Day One');
+    expect(deps.inspect).toHaveBeenCalledOnce();
+    expect(deps.onSuggestion).toHaveBeenCalledTimes(2);
+  });
   it('finishes a captured observation despite a blink or a later target change', async () => {
     const { controller, deps, dwell, point } = setup();
     let finish!: (value: ReturnType<typeof music>) => void;
@@ -310,7 +338,7 @@ describe('grounded proactive suggestions', () => {
     expect(value.identified).toBe(false);
     expect(value.target).toBe('');
     expect(value.speech).toContain('核实作品信息');
-    expect(value.speech).not.toContain(value.description);
+    expect(value.speech).toContain(value.description);
     expect(value.speech).not.toContain('示例艺人');
     expect(value.actions.map((item) => item.kind)).toEqual(['play', 'explain']);
     expect(resolveGazeReply('核实一下', value)).toBe('explain');
@@ -330,7 +358,7 @@ describe('grounded proactive suggestions', () => {
       }),
       0,
     );
-    expect(suggestion?.speech).not.toContain('人物照片');
+    expect(suggestion?.speech).toContain('人物照片');
     expect(suggestion?.speech).toContain('播放它，还是核实作品信息');
     expect(suggestion?.actions.map((item) => item.kind)).toEqual([
       'play',
@@ -360,7 +388,7 @@ describe('grounded proactive suggestions', () => {
     expect(image.actions.map((a) => a.kind)).toEqual(['open', 'explain']);
     expect(resolveGazeReply('打开它', image)).toBe('open');
     expect(resolveGazeReply('第二个', image)).toBe('explain');
-    expect(image.speech).not.toContain('一幅画');
+    expect(image.speech).toContain('一幅画');
   });
   it('still stays silent for blank or ambiguous images rather than guessing', () => {
     for (const flags of [
@@ -388,6 +416,7 @@ describe('grounded proactive suggestions', () => {
       'story',
     ]);
     expect(suggestion.speech.length).toBeLessThan(70);
+    expect(suggestion.speech).toContain('《Day One》');
     expect(suggestion.speech).not.toContain(suggestion.description);
     expect(resolveGazeReply('第一个', suggestion)).toBe('play');
     expect(resolveGazeReply('选2', suggestion)).toBe('explain');

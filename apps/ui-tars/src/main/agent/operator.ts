@@ -10,14 +10,26 @@ import {
 } from '@ui-tars/sdk/core';
 import { NutJSOperator } from '@ui-tars/operator-nut-js';
 import { clipboard } from 'electron';
-import { desktopCapturer } from 'electron';
+import { desktopCapturer, screen } from 'electron';
+import sharp from 'sharp';
 
 import * as env from '@main/env';
 import { logger } from '@main/logger';
 import { sleep } from '@ui-tars/shared/utils';
 import { getScreenSize } from '@main/utils/screen';
+import { withoutAssistantOverlays } from '@main/window/capture';
+import {
+  assertGazeClick,
+  gazeExecutionRect,
+  type GazeExecutionReference,
+} from '../cyrvis/gaze/execution';
 
 export class NutJSElectronOperator extends NutJSOperator {
+  private gazePending: boolean;
+  constructor(private readonly gazeReference?: GazeExecutionReference) {
+    super();
+    this.gazePending = !!gazeReference;
+  }
   static MANUAL = {
     ACTION_SPACES: [
       `click(start_box='[x1, y1, x2, y2]')`,
@@ -34,6 +46,10 @@ export class NutJSElectronOperator extends NutJSOperator {
   };
 
   public async screenshot(): Promise<ScreenshotOutput> {
+    return withoutAssistantOverlays(() => this.captureDesktop());
+  }
+
+  private async captureDesktop(): Promise<ScreenshotOutput> {
     const {
       physicalSize,
       logicalSize,
@@ -77,14 +93,51 @@ export class NutJSElectronOperator extends NutJSOperator {
       height: physicalSize.height,
     });
 
+    let image = resized.toJPEG(75);
+    if (this.gazePending && this.gazeReference) {
+      const current = screen.getPrimaryDisplay().bounds;
+      if (
+        Object.keys(current).some(
+          (key) =>
+            current[key as keyof typeof current] !==
+            this.gazeReference!.displayBounds[key as keyof typeof current],
+        )
+      )
+        throw new Error('显示器位置或尺寸已变化，请重新锁定注视对象。');
+      const r = gazeExecutionRect(
+        this.gazeReference,
+        physicalSize.width,
+        physicalSize.height,
+      );
+      const overlay = Buffer.from(
+        `<svg width="${physicalSize.width}" height="${physicalSize.height}"><rect x="${r.x + 2}" y="${r.y + 2}" width="${Math.max(1, r.width - 4)}" height="${Math.max(1, r.height - 4)}" fill="none" stroke="#ff00cc" stroke-width="4"/></svg>`,
+      );
+      image = await sharp(image)
+        .composite([{ input: overlay }])
+        .jpeg({ quality: 75 })
+        .toBuffer();
+    }
     return {
-      base64: resized.toJPEG(75).toString('base64'),
+      base64: image.toString('base64'),
       scaleFactor,
     };
   }
 
   async execute(params: ExecuteParams): Promise<ExecuteOutput> {
     const { action_type, action_inputs } = params.parsedPrediction;
+    const initialGazeClick =
+      this.gazePending &&
+      this.gazeReference &&
+      ['click', 'left_double', 'right_single'].includes(action_type);
+    if (initialGazeClick) {
+      const { physicalSize } = getScreenSize();
+      assertGazeClick(
+        this.gazeReference!,
+        String(action_inputs.start_box),
+        physicalSize.width,
+        physicalSize.height,
+      );
+    }
 
     if (action_type === 'type' && env.isWindows && action_inputs?.content) {
       const content = action_inputs.content?.trim();
@@ -99,7 +152,17 @@ export class NutJSElectronOperator extends NutJSOperator {
       await sleep(50);
       clipboard.writeText(originalClipboard);
     } else {
-      return await super.execute(params);
+      const pointerAction = [
+        'click',
+        'left_double',
+        'right_single',
+        'drag',
+      ].includes(action_type);
+      const result = await (pointerAction
+        ? withoutAssistantOverlays(() => super.execute(params))
+        : super.execute(params));
+      if (initialGazeClick) this.gazePending = false;
+      return result;
     }
   }
 }

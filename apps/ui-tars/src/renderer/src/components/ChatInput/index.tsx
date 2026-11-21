@@ -33,12 +33,14 @@ const ChatInput = ({
   onSessionCreated,
   disabled,
   checkBeforeRun,
+  voiceConversation = false,
 }: {
   operator: Operator;
   sessionId: string;
   onSessionCreated?: (sessionId: string) => void;
   disabled: boolean;
   checkBeforeRun?: () => Promise<boolean>;
+  voiceConversation?: boolean;
 }) => {
   const { status, instructions: savedInstructions, messages } = useStore();
   const [localInstructions, setLocalInstructions] = useState('');
@@ -81,6 +83,12 @@ const ChatInput = ({
     submitLock.current = true;
     setSubmitting(true);
     try {
+      if (voiceConversation) {
+        const result = await window.electron.voice.submitText(instructions);
+        if (!result.ok) throw new Error(result.error);
+        setLocalInstructions('');
+        return;
+      }
       if (checkBeforeRun && !(await checkBeforeRun())) return;
       await run(
         instructions,

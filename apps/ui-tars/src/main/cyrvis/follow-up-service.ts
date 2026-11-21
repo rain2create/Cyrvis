@@ -11,7 +11,11 @@ import { showMainWindow } from '@main/window/index';
 import type { CyrvisMemorySnapshot } from '@shared/cyrvis';
 import { voiceMemoryService } from './memory';
 import { travelPlanner } from './travel/travel-planner';
-import { publishProactiveText, speakProactiveText } from './voice-service';
+import {
+  publishProactiveText,
+  shouldDeferFollowUpSpeech,
+  speakProactiveText,
+} from './voice-service';
 
 export type FollowUpReason =
   | 'launch'
@@ -362,6 +366,13 @@ const enrichAndSpeak = async (prompt: FollowUpPrompt): Promise<void> => {
     pending: enriched,
   });
   broadcastPrompt(enriched);
+
+  if (shouldDeferFollowUpSpeech()) {
+    logger.info(
+      '[cyrvis follow-up] kept greeting in panel while attention is busy',
+    );
+    return;
+  }
 
   // Always mirror proactive lines into the transcript/memory.
   publishProactiveText(speech);

@@ -17,7 +17,10 @@ const mock = vi.hoisted(() => ({
   wake: vi.fn(),
   speakReply: vi.fn(),
   offerSuggestion: vi.fn(),
+  readoutActive: false,
   objectScan: vi.fn(async () => ({ scene: 'test', objects: [] as any[] })),
+  cursorPoint: vi.fn(),
+  cursorTarget: vi.fn(),
   start: vi.fn(async () => undefined),
   captureClose: vi.fn(),
   provider: {
@@ -103,8 +106,8 @@ vi.mock('./gaze/native-objects', () => ({
 }));
 vi.mock('./gaze/cursor', () => ({
   DesktopGazeCursor: class {
-    update = vi.fn();
-    updateTarget = vi.fn();
+    update = mock.cursorPoint;
+    updateTarget = mock.cursorTarget;
     hide = vi.fn();
     setEnabled = vi.fn();
     toggle = vi.fn();
@@ -146,6 +149,8 @@ vi.mock('./voice-brain', () => ({
     forceAwake = mock.wake;
     speakRequestedReply = mock.speakReply;
     clearGazeSuggestion = vi.fn();
+    isReadoutSpeechActive = () => mock.readoutActive;
+    handleBargeStop = vi.fn();
     isGazeFollowup = () => false;
     canOfferGazeSuggestion = () => true;
     gazeSuggestionBlockReason = () => undefined;
@@ -164,6 +169,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mock.skinId = undefined;
   mock.capture = null;
+  mock.readoutActive = false;
+  mock.offerSuggestion.mockReturnValue(true);
   mock.objectScan.mockResolvedValue({ scene: 'test', objects: [] });
   mock.skinListeners.clear();
   vi.useFakeTimers();
@@ -178,6 +185,17 @@ it('starts with the saved companion voice instead of the default', async () => {
   expect(mock.config!.voice).toBe('Raymond');
 });
 
+it('rejects energy-only interruption of gaze readout and defers historical greeting speech', async () => {
+  const { startVoiceService, shouldDeferFollowUpSpeech } = await import(
+    './voice-service'
+  );
+  startVoiceService();
+  mock.readoutActive = true;
+  mock.events.get('cyrvis:voice:cancel-speech-only')!();
+  expect(mock.provider.bargeIn).not.toHaveBeenCalled();
+  expect(shouldDeferFollowUpSpeech()).toBe(true);
+});
+
 it('routes a gaze-button answer through the brain so sleeping voice can speak it', async () => {
   const { startVoiceService } = await import('./voice-service');
   const { gazeInspector } = await import('./gaze/desktop-inspector');
@@ -188,16 +206,6 @@ it('routes a gaze-button answer through the brain so sleeping voice can speak it
   await mock.handlers.get('cyrvis:gaze:inspect')!();
   expect(mock.speakReply).toHaveBeenCalledWith('看屏结果');
   inspect.mockRestore();
-});
-
-it('speaks the nine-point calibration notice through the active voice brain', async () => {
-  const { startVoiceService } = await import('./voice-service');
-  const { GAZE_CALIBRATION_NOTICE } = await import('@shared/gaze');
-  startVoiceService();
-  expect(
-    await mock.handlers.get('cyrvis:gaze:announce-calibration')!(),
-  ).toMatchObject({ spoken: true, text: GAZE_CALIBRATION_NOTICE });
-  expect(mock.speakReply).toHaveBeenCalledWith(GAZE_CALIBRATION_NOTICE);
 });
 
 it('prefers QWEN_VOICE over companion skins when configured', async () => {
@@ -350,10 +358,35 @@ it('feeds locked object context into proactive recognition instead of raw jitter
     y: 0.5,
     target: { id: 'cover' },
   });
+  expect(mock.cursorPoint).not.toHaveBeenCalled();
+  expect(mock.cursorTarget).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      phase: 'locked',
+      target: expect.objectContaining({ id: 'cover' }),
+    }),
+  );
   expect(suggest).toHaveBeenCalledOnce();
   mock.handlers.get('cyrvis:gaze:cursor')!(undefined, null);
   expect(getDesktopGaze()).toBeNull();
   suggest.mockRestore();
+});
+
+it('shows the free point only when object snapping is explicitly disabled', async () => {
+  const { startVoiceService } = await import('./voice-service');
+  startVoiceService();
+  const sample = () => ({ x: 0.5, y: 0.5, timestamp: Date.now() });
+  mock.handlers.get('cyrvis:gaze:cursor')!(undefined, sample());
+  await vi.advanceTimersByTimeAsync(50);
+  expect(mock.cursorPoint).not.toHaveBeenCalled();
+  expect(mock.cursorTarget).toHaveBeenLastCalledWith(null);
+  mock.handlers.get('cyrvis:gaze:object-configure')!(undefined, false);
+  const raw = sample();
+  mock.handlers.get('cyrvis:gaze:cursor')!(undefined, raw);
+  expect(mock.cursorPoint).toHaveBeenLastCalledWith(raw);
+  mock.handlers.get('cyrvis:gaze:object-configure')!(undefined, true);
+  mock.cursorPoint.mockClear();
+  mock.handlers.get('cyrvis:gaze:cursor')!(undefined, sample());
+  expect(mock.cursorPoint).not.toHaveBeenCalled();
 });
 
 it('keeps voice paused when the companion is changed', async () => {

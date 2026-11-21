@@ -74,6 +74,10 @@ class FakeProvider implements VoiceProvider {
     this.callbacks.onReady?.();
   }
 
+  isReady(): boolean {
+    return this.connected;
+  }
+
   sendAudio(pcm16: Int16Array): void {
     this.audio.push(pcm16);
   }
@@ -124,6 +128,7 @@ const setup = (options?: {
   inspectGaze?: (question: string) => Promise<string>;
   requireWakeWord?: boolean;
   awakeTimeoutMs?: number;
+  snoozeProactiveGaze?: (ms?: number) => void;
   rememberFact?: (text: string) => Promise<string | null>;
   codingAgent?: CodingAgentService;
   openExternal?: (url: string) => Promise<void>;
@@ -173,6 +178,7 @@ const setup = (options?: {
       awakeTimeoutMs: options?.awakeTimeoutMs ?? 0,
       rememberFact: options?.rememberFact,
       inspectGaze: options?.inspectGaze,
+      snoozeProactiveGaze: options?.snoozeProactiveGaze,
       getGazeActionContext: options?.getGazeActionContext,
       codingAgent: options?.codingAgent,
       openExternal: options?.openExternal,
@@ -194,6 +200,26 @@ afterEach(() => {
 });
 
 describe('VoiceBrain', () => {
+  it.each(['打开桌面上最近的那个文件', '打开下载里的那个 report.txt'])(
+    'keeps the main file routing for %s while retaining explicit gaze references',
+    async (request) => {
+      const getGazeActionContext = vi.fn(() => null);
+      const { brain, provider, adapter } = setup({
+        requireWakeWord: false,
+        getGazeActionContext,
+      });
+      await brain.start();
+      provider.emitTranscript(request);
+      await flush();
+      expect(getGazeActionContext).not.toHaveBeenCalled();
+      expect(adapter.instruction).toBe('');
+      provider.emitTranscript('打开我正在看的这个文件');
+      await flush();
+      expect(getGazeActionContext).toHaveBeenCalledOnce();
+      brain.dispose();
+    },
+  );
+
   it('supersedes an early read-only gaze tool when ASR confirms the user asked for a GUI action', async () => {
     let finish!: (value: string) => void;
     const gaze = {
@@ -322,8 +348,11 @@ describe('VoiceBrain', () => {
     await flush();
     expect(controller.getStatus().status).toBe('executing');
     expect(adapter.instruction).toContain('[已绑定注视对象]');
-    expect(adapter.instruction).toContain('点击该对象并执行用户要求的播放操作');
-    expect(adapter.instruction).toContain('依据实际界面变化报告结果');
+    expect(adapter.instruction).toContain('点击该歌单/作品并开始播放');
+    expect(adapter.instruction).toContain('不要求先从封面认出作品名');
+    expect(adapter.instruction).toContain(
+      '确认播放器的播放/暂停状态或曲目信息后再报告播放成功',
+    );
     expect(provider.submitted).toEqual([]);
     expect(provider.spoken.join('')).not.toContain('播放成功');
     provider.emitToolCall({
@@ -397,6 +426,39 @@ describe('VoiceBrain', () => {
     expect(brain.getState().awake).toBe(true);
     expect(provider.spoken).toEqual(['这片区域是一个歌单。']);
     expect(audioOut).toHaveLength(1);
+    brain.dispose();
+  });
+
+  it('protects gaze audio until playback drains, while explicit stop still cancels it', async () => {
+    const { brain, provider } = setup();
+    await brain.start();
+    brain.speakRequestedReply('注视区域里是 Day One。要播放还是查看信息？');
+    provider.emitAudio(new Int16Array([10, 20]));
+    provider.callbacks.onSpeechStarted?.(); // Laptop echo is only a VAD/energy hint.
+    provider.callbacks.onSpeechStopped?.();
+    provider.callbacks.onResponseDone?.();
+    expect(brain.isReadoutSpeechActive()).toBe(true);
+    expect(brain.getState().readoutGuardUntil).toBeGreaterThan(Date.now());
+    provider.callbacks.onPlaybackIdle?.();
+    expect(brain.isReadoutSpeechActive()).toBe(false);
+    brain.speakRequestedReply('再读一次。');
+    provider.emitTranscript('停一下');
+    expect(brain.isReadoutSpeechActive()).toBe(false);
+    expect(provider.canceled).toBeGreaterThan(0);
+    brain.dispose();
+  });
+
+  it('rejects a gaze reminder while disconnected instead of claiming it was spoken', async () => {
+    const { brain, provider } = setup();
+    await brain.start();
+    provider.connected = false;
+    const suggestion = parseGazeSuggestion(
+      '{"kind":"image","description":"一幅画","confidence":"high"}',
+      Date.now(),
+    )!;
+    expect(brain.offerGazeSuggestion(suggestion)).toBe(false);
+    expect(provider.spoken).toEqual([]);
+    expect(brain.isReadoutSpeechActive()).toBe(false);
     brain.dispose();
   });
 
@@ -1954,6 +2016,34 @@ describe('VoiceBrain', () => {
     vi.advanceTimersByTime(2000);
     expect(brain.getState().awake).toBe(false);
     expect(wakeEvents).toContain('sleep');
+  });
+
+  it('accepts a new screen question after idle sleep and after stopping the prior task', async () => {
+    const inspect = vi
+      .fn()
+      .mockResolvedValueOnce('这是音乐封面。')
+      .mockResolvedValueOnce('这是新的微信联系人区域。');
+    const snooze = vi.fn();
+    const { brain, provider, adapter } = setup({
+      inspectGaze: inspect,
+      snoozeProactiveGaze: snooze,
+    });
+    await brain.start();
+    expect(brain.getState().awake).toBe(false);
+    provider.emitTranscript('我在看什么');
+    await flush();
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(provider.spoken).toContain('这是音乐封面。');
+    provider.emitTranscript('停止任务');
+    expect(snooze).toHaveBeenCalledWith(8000);
+    brain.sleep();
+    provider.emitTranscript('帮我看看这里');
+    await flush();
+    expect(brain.getState().awake).toBe(true);
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(provider.spoken).toContain('这是新的微信联系人区域。');
+    expect(adapter.instruction).toBe('');
+    brain.dispose();
   });
 
   it('stays awake when wake word is disabled', async () => {

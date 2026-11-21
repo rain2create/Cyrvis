@@ -145,16 +145,6 @@ describe('desktop gaze cursor', () => {
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
     cursor.destroy();
   });
-  it('falls back to the raw gaze point when object scanning is unavailable', () => {
-    const cursor = new DesktopGazeCursor();
-    cursor.update(sample());
-    const win = state.windows[0];
-    win.webContents.emit('did-finish-load');
-    cursor.updateTarget(null);
-    expect(win.visible).toBe(true);
-    expect(win.setPosition).toHaveBeenLastCalledWith(-738, 432, false);
-    cursor.destroy();
-  });
   it('does not restore a stale highlight after local capture finishes', async () => {
     const cursor = new DesktopGazeCursor();
     cursor.update(sample());

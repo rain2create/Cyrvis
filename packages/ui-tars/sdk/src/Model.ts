@@ -110,6 +110,7 @@ export class UITarsModel extends Model {
       max_tokens = uiTarsVersion == UITarsModelVersion.V1_5 ? 65535 : 1000,
       temperature = 0,
       top_p = 0.7,
+      timeout = 30_000,
       ...restOptions
     } = this.modelConfig;
 
@@ -224,7 +225,7 @@ export class UITarsModel extends Model {
 
         result = await openai.responses.create(responseParams, {
           ...options,
-          timeout: 1000 * 30,
+          timeout,
           headers,
         });
         logger.info('[ResponseAPI] [result]: ', result);
@@ -261,7 +262,7 @@ export class UITarsModel extends Model {
       createCompletionPramsThinkingVp,
       {
         ...options,
-        timeout: 1000 * 30,
+        timeout,
         headers,
       },
     );

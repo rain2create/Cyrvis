@@ -119,6 +119,7 @@ export default function HistoryPage() {
             </p>
           )}
           <ChatInput
+            voiceConversation={record.meta.source === 'companion'}
             key={id}
             sessionId={id}
             operator={record.meta.operator || Operator.LocalComputer}

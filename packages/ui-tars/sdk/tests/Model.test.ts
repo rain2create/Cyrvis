@@ -52,6 +52,33 @@ describe('UITarsModel', () => {
   });
 
   describe('ChatCompletion API', () => {
+    it('honors a configured model deadline instead of overriding it with 30 seconds', async () => {
+      const model = new UITarsModel({
+        apiKey: 'test-key',
+        baseURL: 'https://test.com',
+        model: 'test-model',
+        timeout: 45_000,
+        max_tokens: 384,
+      });
+      mockCreate.mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: "Action: click(point='<point>100 200</point>')",
+            },
+          },
+        ],
+      });
+      await model.invoke({
+        conversations: [{ from: 'human', value: '点击按钮' }],
+        images: [],
+        screenContext: { width: 1470, height: 956 },
+      });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ max_tokens: 384 }),
+        expect.objectContaining({ timeout: 45_000 }),
+      );
+    });
     it('should send all messages for ChatCompletion API', async () => {
       const model = new UITarsModel({
         apiKey: 'test-key',

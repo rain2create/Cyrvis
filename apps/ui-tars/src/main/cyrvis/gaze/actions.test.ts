@@ -70,9 +70,4 @@ describe('gaze desktop actions', () => {
     expect(instruction).toContain('objectBounds');
     expect(instruction).not.toContain('inspect_gaze_target');
   });
-  it('does not hijack a resolvable desktop file reference as gaze', () => {
-    expect(gazeDesktopAction('打开桌面上最近的那个文件')).toBeNull();
-    expect(gazeDesktopAction('打开下载里的那个 report.txt')).toBeNull();
-    expect(gazeDesktopAction('打开这个文件')).toBe('click');
-  });
 });

@@ -25,6 +25,7 @@ describe('classifyIntent', () => {
     ['open Notepad and type hello', 'task'],
     ['关闭浏览器', 'task'],
     ['save the page as PDF', 'task'],
+    ['然后你现在艾特我刚才注视的这个人，给他发一个表情包', 'task'],
   ])('routes actionable text to task: %s', (text, kind) => {
     expect(classifyIntent(text).kind).toBe(kind);
   });

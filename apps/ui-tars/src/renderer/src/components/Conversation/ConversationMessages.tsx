@@ -7,6 +7,7 @@ import type { Status } from '@ui-tars/shared/types';
 import logo from '@resources/logo-vector.svg?url';
 import { Button } from '../ui/button';
 import { Markdown } from '../markdown';
+import { GazeTurn } from './GazeTurn';
 
 const statusLabels: Partial<Record<Status, string>> = {
   running: 'Working on your request…',
@@ -133,7 +134,9 @@ export function ConversationMessages({
   return (
     <div className="cyrvis-message-list">
       {turns.map((turn, index) =>
-        turn.role === 'human' ? (
+        turn.gazeTurn ? (
+          <GazeTurn key={turn.gazeTurn.id} turn={turn.gazeTurn} />
+        ) : turn.role === 'human' ? (
           <div className="cyrvis-human-turn" key={index}>
             <div>{turn.text}</div>
           </div>
