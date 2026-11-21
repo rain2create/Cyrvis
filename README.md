@@ -56,6 +56,11 @@ agent, and deterministic tools share one task state and one context.
 
 ## See it in action
 
+<p align="center">
+  <img src="./design/cyrvis-demo/cyrvis-coding-demo.gif" width="860" alt="Silent CYRVIS coding-agent demo: creating heart.py and drawing a turtle heart" />
+</p>
+<p align="center"><sub><strong>Coding agent demo</strong> — CYRVIS writes <code>heart.py</code> and runs the turtle animation. Silent 7.5s loop.</sub></p>
+
 | You say                                                 | CYRVIS does                                                                                                             |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | “帮我看一下这个报错，直接修掉”                          | Reads the visible editor, plans the fix, edits the file, and runs the relevant test.                                    |

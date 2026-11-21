@@ -53,6 +53,11 @@ CYRVIS 把桌面变成一个可以对话的工作空间。你不需要把问题�
 
 ## 它能做什么
 
+<p align="center">
+  <img src="./design/cyrvis-demo/cyrvis-coding-demo.gif" width="860" alt="CYRVIS 编码 Agent 无声演示：生成 heart.py 并画出一颗爱心" />
+</p>
+<p align="center"><sub><strong>编码 Agent 演示</strong> — CYRVIS 写入 <code>heart.py</code> 并运行 turtle 动画。无声，7.5 秒循环。</sub></p>
+
 | 你说                                                    | CYRVIS 会做                                                                |
 | ------------------------------------------------------- | -------------------------------------------------------------------------- |
 | “帮我看一下这个报错，直接修掉”                          | 读取当前编辑器内容，规划修复，修改文件并运行相关测试。                     |
