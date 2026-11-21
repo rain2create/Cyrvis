@@ -1,3 +1,5 @@
+> **归档（2026-11-21）**：本文记录当时的设计或计划，已不代表当前实现。当前状态见 [../project-status-20261121.md](../project-status-20261121.md) 与 [../architecture.md](../architecture.md)。归档文档内的相对链接按原 `doc/` 根目录解释。
+
 # Coding Agent 接入计划
 
 > 2026-11-19。目标是在 CYRVIS 里接入一个“仓库级代码任务”执行器，同时把确定性文件/内容任务继续留在 Fast tools。

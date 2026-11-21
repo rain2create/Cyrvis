@@ -1,7 +1,9 @@
+> **归档（2026-11-21）**：本文记录当时的设计或计划，已不代表当前实现。当前状态见 [../project-status-20261121.md](../project-status-20261121.md) 与 [../architecture.md](../architecture.md)。归档文档内的相对链接按原 `doc/` 根目录解释。
+
 # CYRVIS GUI Benchmark 结果
 
 > 说明：第一阶段每任务只跑 1 次，属于方向性基线，不做统计结论。
-> 详细方案见 [gui-acceleration-plan.md](./gui-acceleration-plan.md)。
+> 详细方案见 [gui-acceleration-plan.md](./gui-acceleration-plan-20261116.md)。
 
 ## B0：Seed 2.1 Lite 基线（2026-11-16）
 

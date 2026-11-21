@@ -1,18 +1,20 @@
-# cyrvis/gui（规划中）
+# cyrvis/gui
 
-归属分支：`feat/gui-accel`、`feat/mcp-tools`
+该目录保留为 GUI 加速/路由的历史入口说明；当前实现已经落到：
 
-职责：
+| 能力 | 当前实现 |
+|---|---|
+| 任务调度、队列、暂停/取消 | `../orchestration/` |
+| 快速工具路由 | `../tools/router.ts`、`../tools/matrix.ts` |
+| 简单任务直连 | `../tools/` 的基础工具与 `CapabilityBroker` |
+| MCP | `../tools/mcp-server.ts`、Provider 系统 |
+| GUI 执行 | `../gui-adapter.ts` → `../../services/runAgent.ts` → UI-TARS SDK |
 
-- `task-router.ts`：意图 → 简单任务直连 / GUI Agent / 反问；
-- `simple-tasks.ts`：文件、URL、搜索、剪贴板等确定性执行；
-- `mcp-bridge.ts`：MCP client、工具发现、权限、审计；
-- `accelerator.ts`：Action Batching、截图去重、loop wait、模型路由。
+约束仍然有效：
 
-约束：
+- 不直接在 `voice-brain.ts` 内部堆叠复杂 GUI 规划；
+- 所有工具调用必须有超时、取消、权限和审计；
+- 新能力先走工具/Provider 接口，再考虑 GUI 视觉循环。
 
-- 不直接改 `voice-brain.ts` 内部；通过新增接口接入 Controller；
-- 共享类型改动先对齐 `types.ts`；
-- 所有工具调用必须有超时、取消、权限与日志。
-
-详见 `doc/roadmap.md` 第 1 节。
+详见 [doc/architecture.md](../../../../../../doc/architecture.md) 与
+[doc/roadmap.md](../../../../../../doc/roadmap.md)。

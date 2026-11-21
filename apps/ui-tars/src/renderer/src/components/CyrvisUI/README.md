@@ -1,23 +1,21 @@
 # CyrvisUI
 
-当前第一阶段实现在 `pages/widget/`，其余工作台能力仍按 `feat/ui` 分支规划。
+CYRVIS 工作台/页面级 UI 的说明入口。当前主要界面已经拆分到：
 
-应用启动时主窗口在后台加载 `/local` Computer 模式但不显示；右侧悬浮面板
-是默认入口，只有面板中的 Home 按钮会显示主窗口。主窗口只作为 Computer
-交互、历史和设置界面。
-
-职责：
-
-- CYRVIS 工作台：语音状态、转写、任务时间线、截图缩略图；
-- 麦克风/输出设备选择、耳机/外放切换、打断按钮；
-- 首次启动与权限引导；
-- Gaze 状态占位（后续接 `CyrvisGaze`）。
+| 组件 | 职责 |
+|---|---|
+| `../CyrvisVoice/` | 语音采集、播放、打断、历史、浮层 |
+| `../CyrvisGaze/` | 眼动校准、注视可视化、AI 看屏控制 |
+| `../CyrvisRuntime/` | 编排任务、自主建议、能力合成面板 |
+| `../CyrvisCompanion/` | 桌面伴侣外观与气泡 |
+| `../Conversation/` | 对话消息与 GazeTurn 卡片 |
+| `pages/widget/` | 右侧常驻语音面板 |
 
 约束：
 
-- 只消费 `VoiceUiState` / `ControllerEvent`，不直接调用模型；
-- 不自行采集麦克风或注册音频播放回调，统一由主窗口语音链路负责；
-- 不阻塞语音主链路；大依赖按需加载；
-- GUI 执行时主窗口隐藏，任务信息需同步到 widget 或结束后回放。
+- 只消费 `VoiceUiState` / `ControllerEvent` / Runtime snapshot；不直接调用模型；
+- 不自行采集麦克风或注册第二套播放链路；
+- 大依赖按需加载，不阻塞语音主链路；
+- GUI 执行时主窗口可能隐藏，任务状态同步到伴侣/任务面板。
 
-详见 `doc/roadmap.md` 第 2 节。
+详见 [doc/architecture.md](../../../../../../../doc/architecture.md)。

@@ -1,5 +1,17 @@
 # CYRVIS 语音架构（最终实现）
 
+> **2026-11-21 当前实现说明（先读）**
+>
+> 默认 `CYRVIS_VOICE_ENGINE=omni` 时，麦克风由主 Renderer 的 `VoiceRuntime` 采集，
+> `CYRVIS_RENDERER_CAPTURE` 默认开启；主麦克风始终请求 AEC，另开一路 raw mic 仅给本地 KWS，
+> 避免 AEC 压掉“停一下”。打断链路为：快速能量判断 + 播放 PCM 参考互相关 + 文本回声过滤 +
+> KWS/声纹兜底；注视播报期间使用 readout guard，明确停止词/按钮仍优先。
+> 旧的隐藏采集窗口路径 `capture-service.ts` 仅作兼容和 cascade 场景使用。
+>
+> 下文第 1–5 节的“隐藏采集窗口 + echoCancellation:false”是 **2026-11-16 的历史方案**，
+> 保留用于理解阈值/回声检测的来龙去脉；当前拓扑以本节和
+> [architecture.md](./architecture.md) 为准。
+
 > 状态：2026-11-16 实现参考信号回声检测与双模式语音打断。
 > 目标：端到端实时语音对话 + 语音打断 + 语音控制 GUI Agent。
 > 相关文档：[architecture.md](./architecture.md)（整体）、[roadmap.md](./roadmap.md)（后续）、

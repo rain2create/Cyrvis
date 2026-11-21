@@ -1,3 +1,5 @@
+> **归档（2026-11-21）**：本文记录当时的设计或计划，已不代表当前实现。当前状态见 [../project-status-20261121.md](../project-status-20261121.md) 与 [../architecture.md](../architecture.md)。归档文档内的相对链接按原 `doc/` 根目录解释。
+
 # CYRVIS GUI 加速实验方案（不含 MCP/直连工具）
 
 > 最后更新：2026-11-16

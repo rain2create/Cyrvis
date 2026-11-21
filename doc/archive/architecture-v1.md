@@ -249,8 +249,8 @@ apps/ui-tars/src/renderer/src/components/CyrvisVoice/
 5. **主动策略**：确认、停滞、完成、失败四类先做。
 6. **评测与演示**：固定语料、固定任务、录屏。
 
-当前语音实现见 [voice-architecture.md](./voice-architecture.md)；历史任务清单见
-[archive/voice-implementation-v1.md](./archive/voice-implementation-v1.md)。
+当前语音实现见 [voice-architecture.md](../voice-architecture.md)；历史任务清单见
+[archive/voice-implementation-v1.md](./voice-implementation-v1.md)。
 
 ## 11. 风险与降级
 

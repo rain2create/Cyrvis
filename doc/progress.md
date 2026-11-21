@@ -1,5 +1,15 @@
 # CYRVIS 进度
 
+## 2026-11-21：里程碑收尾
+
+- [x] 合并 PR #10：编排运行时、自主性、能力合成、伴侣/工作台 UI、桌面感知与文档工具。
+- [x] 保留 main 语音行为：确定性确认、pending-intent、确认回声绕过、stop/barge 守卫、编码进度守卫、FIFO 主动播报。
+- [x] 合并 PR #11：眼动聊天/播放回执、主动提醒、绑定注视执行、对象吸附修复；解决 2 处冲突。
+- [x] 不合并 PR #12：眼动核心与 #11 相同，额外为外放回声校验/GUI 压缩；当前不引入。
+- [x] 文档整理：新增当前 `architecture.md`、`project-status-20261121.md`、`roadmap.md`、`plan.md`；旧架构/路线图/计划归档到 `doc/archive/`；CYRVIS 专属眼动/感知文档从 `docs/` 迁回 `doc/`。
+- [x] 验证：Node/Web typecheck 通过；CYRVIS 79 文件 536 用例通过；SDK 32 用例通过；默认全量 vitest 566 用例通过，7 个环境/别名加载失败。
+- [x] 当前 main：`c4c49a80`；项目进入阶段收尾，下一步按 `plan.md` 做真实设备验收。
+
 ## 2026-11-19：语义工具与动态工具统一
 
 - [x] 语音模型只暴露 `search_web`、`open_url`、`open_app`、`open_site` 这些语义入口；重复的动态搜索/网址/启动入口从语音工具列表隐藏，Registry/MCP 能力保留。
@@ -61,11 +71,11 @@
 - [x] 收紧提示词：click+type 仅在截图中已见文本光标时允许；`finished` 前必须核对最新截图。
 - [x] parser 26/26 测试通过；新增 SDK 单测“一次响应 2 个动作只截 1 次图”，GUIAgent 5/5 通过；App main typecheck 通过；SDK 已重新构建。
 - [x] 干净复测通过：记事本已聚焦、光标在末尾、不点击；模型一轮返回 `type` + `hotkey(enter)`，总 `loopCnt=2`，截图确认 `PRE batch test`、光标到第 2 行第 1 列。任务未要求保存，文件标题仍带 `*`。
-- [x] 制定 GUI 加速实验方案 `doc/gui-acceleration-plan.md`：第一批只跑 4 个任务——L1 记事本（批量友好）、L4 本地搜索→新标签→详情（状态依赖）、L5 跨应用读码→保存（跨窗口）、R1 携程上海→巴黎机票（真实长任务）。L2/L3/L6/L7/R2/R3 进候选池。按分组汇报，避免只用 batch-friendly 任务。MCP/直连本轮不做。
+- [x] 制定 GUI 加速实验方案 `doc/archive/gui-acceleration-plan-20261116.md`：第一批只跑 4 个任务——L1 记事本（批量友好）、L4 本地搜索→新标签→详情（状态依赖）、L5 跨应用读码→保存（跨窗口）、R1 携程上海→巴黎机票（真实长任务）。L2/L3/L6/L7/R2/R3 进候选池。按分组汇报，避免只用 batch-friendly 任务。MCP/直连本轮不做。
 - [ ] 可选下一步：把 `loopIntervalInMs` 1000→300 做对比；或增加“输入后保存文件”的任务验证带对话框的批量边界。
 - [x] 开始 ShowUI-2B 接入：模型下载到 `D:\Desktop\project\CYRVIS\models\ShowUI-2B`，Python 环境 `D:\Desktop\project\CYRVIS\showui-env`；侧车 `scripts/cyrvis/showui-server/app.py`、`run-showui.ps1`、映射 README 已写。
 - [x] Benchmark harness 初版：`scripts/cyrvis/bench/`（本地站点 server、L1/L4/L5/R1 setup、CDP run-task、README）。
-- [x] 基线 B0（Seed 2.1 Lite，每任务 1 次）：L1 成功 6 轮/48.6s/0 批量；L4 成功 11 轮/104.5s/1 次批量（type+Enter）；L5 成功 4 轮/29.4s/0 批量；R1 携程超时失败 27 轮/300s/20.5 万 tokens（卡在目的地下拉/日期选择）。结果记录在 `doc/benchmark-results.md`。
+- [x] 基线 B0（Seed 2.1 Lite，每任务 1 次）：L1 成功 6 轮/48.6s/0 批量；L4 成功 11 轮/104.5s/1 次批量（type+Enter）；L5 成功 4 轮/29.4s/0 批量；R1 携程超时失败 27 轮/300s/20.5 万 tokens（卡在目的地下拉/日期选择）。结果记录在 `doc/archive/benchmark-results.md`。
 - [x] CUDA PyTorch 2.11.0+cu128 在 RTX 5060 上验证可用（`torch.cuda.is_available()=True`）；ShowUI-2B 下载完成（约 4.2GB）。
 - [x] ShowUI-2B 侧车跑通：BF16 占用 4.12GB，2.3–3.4s/步，1MP 输入；L4 网页任务成功 5 轮/35.4s（Seed 11 轮/104.5s）；L1/L5 桌面任务失败，原因是动作空间没有 `hotkey`/`Ctrl+S`/跨应用能力，模型卡在 `SCROLL`。
 - [x] 修复侧车坐标异常：`1<v<=100` 按百分比归一化（45→0.45），>100 按像素；修复后 L4 通过。侧车 keep-alive 改为 120s，待复测连接错误。

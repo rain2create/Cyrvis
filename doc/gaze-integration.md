@@ -1,5 +1,9 @@
 # 2026-11-19 最新版眼动整合
 
+> **2026-11-21 更新**：眼动核心已由 PR #11 合入 main（`c4c49a80`），并包含对象吸附/锁定框修复。
+> PR #12 的眼动核心与此相同，但基于旧控制器，未合并。当前架构见
+> [architecture.md](./architecture.md)，状态见 [project-status-20261121.md](./project-status-20261121.md)。
+
 基线：origin/main 的 d919f5f8（2026-11-19 12:19:22 +0800）。
 整合分支：codex/gaze-integration-20261119。
 原本地眼动版本已保存于 codex/eye-tracking-exploration 的 a7b701e5，方便回溯。

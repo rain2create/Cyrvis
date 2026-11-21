@@ -1,7 +1,7 @@
 # CYRVIS GUI benchmark harness (first batch)
 
 First batch: **L1, L4, L5, R1**; each run once. See
-`doc/gui-acceleration-plan.md` for the full design.
+`doc/archive/gui-acceleration-plan-20261116.md` for the full design.
 
 ## Prerequisites
 

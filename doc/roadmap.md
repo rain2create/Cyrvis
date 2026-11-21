@@ -1,185 +1,59 @@
-# CYRVIS Roadmap（2026-11-15 组内讨论版）
+# CYRVIS Roadmap（2026-11-21 里程碑版）
 
-> 当前基线：语音对话、语音打断（耳机模式）、GUI 任务、主动播报、双输出模式已跑通。
-> 后续四个重点：**GUI Agent 加速/MCP/简单任务直连**、**UI 升级**、**眼动**、**主动性/记忆**。
-> 本文是实现方向与模块边界，具体排期由各分支负责人补充。
+> 项目当前告一段落。旧的 2026-11-15 规划已归档到
+> [archive/roadmap-20261115.md](./archive/roadmap-20261115.md)。
+> 当前实现见 [architecture.md](./architecture.md)，完整状态见
+> [project-status-20261121.md](./project-status-20261121.md)。
 
-## 0. 当前基线（已实现）
+## 0. 当前基线
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
-| 端到端语音对话 | ✅ | Qwen Realtime WebSocket，Function Calling |
-| 语音打断 | ✅ 耳机模式 | 隐藏采集窗口 + 主进程能量检测（1000/150ms） |
-| 外放模式 | ✅ 半双工 | 防自问自答；语音打断关闭，`Ctrl+Alt+X` 兜底 |
-| GUI 任务 | ✅ | Controller → ElectronGUIAdapter → UI-TARS GUIAgent |
-| 确定性暂停/取消 | ✅ | VoiceBrain 不依赖模型工具调用 |
-| 主动播报 | ✅ 基础 | task_started/done/failed/cancelled |
-| 简单任务直连 | ❌ | 目前全部走 VLM GUI 循环 |
+| 实时语音对话 | ✅ | Qwen Realtime Omni，Renderer 采集 + AEC |
+| 语音打断 | ✅ | 外放快速能量打断、KWS/声纹、回声过滤、明确停止词 |
+| 确定性工具 | ✅ | Registry/Router/Broker/MCP/Workflow，危险操作确认 |
+| GUI 任务 | ✅ | Controller/编排 → UI-TARS GUI Agent |
+| 编码任务 | ✅ | workspace、diff、运行结果、主动播报 |
+| 旅游比价 | ✅ 单程 | Google + 携程 + Trip.com；OTA 仅单程 |
+| 眼动 | ✅ 实验 | 校准、截图识别、聊天回执、主动提醒、绑定点击 |
+| 主动性与记忆 | 🟡 实验 | Autonomy、上下文感知、运行时记忆 |
+| Linux | ❌ | 未验证 |
 
----
+## 1. P0：真实设备验收与演示稳定
 
-## 1. GUI Agent：加速 + MCP + 简单任务直连（最高优先级）
-
-### 1.1 目标
-
-- 简单任务（创建文件、打开 URL、搜索、复制文本、查天气）**不进入 VLM 截图循环**，直接调用 MCP/本地工具，目标 < 1s；
-- 复杂任务仍走 UI-TARS VLM，但单步延迟降低、动作批量化；
-- 统一工具协议：MCP tools + 本地工具 + GUI Agent 工具，VoiceBrain 只面对一个 Task Router。
-
-### 1.2 架构
-
-```
-VoiceBrain
-  → TaskRouter（新增）
-      ├─ SimpleTaskHandler：MCP filesystem/browser/shell 等直连
-      ├─ GUIHandler：Controller → ElectronGUIAdapter → GUIAgent
-      └─ ClarifyHandler：信息不足时反问
-```
-
-建议新增（不要全部塞进 `voice-brain.ts`）：
-
-| 文件 | 职责 |
-|---|---|
-| `src/main/cyrvis/gui/task-router.ts` | 意图 → 简单任务 / GUI / 反问；可测试的纯路由 |
-| `src/main/cyrvis/gui/simple-tasks.ts` | 文件、URL、搜索、剪贴板等确定性执行器 |
-| `src/main/cyrvis/gui/mcp-bridge.ts` | MCP client 生命周期、工具发现、权限、调用结果 |
-| `src/main/cyrvis/gui/accelerator.ts` | Action Batching、截图去重、循环等待、模型路由 |
-| `src/main/cyrvis/gui/prompts.ts` | GUI/加速相关 prompt，避免改动上游 `agent/prompts.ts` |
-
-### 1.3 加速清单
-
-| 项 | 现状 | 目标 |
+| 项 | 目标 | 验收 |
 |---|---|---|
-| Loop wait | 1000ms | 200–300ms 可配置 |
-| Action Batching | 无 | 连续 click/type 合并，减少截图轮次 |
-| 截图 | 每步全屏 JPEG | 变化区域/低分辨率预览/去重 |
-| 模型路由 | 固定 Seed 2.1 Lite | 简单任务用小模型/直连；复杂任务用强模型 |
-| Responses API | 关闭 | 评估 `useResponsesApi` 对延迟的影响 |
-| GUI-KV / 轻量 VLA | 未接 | 研究 ShowUI-2B、FocusUI、GUI-KV 的接入边界 |
-| MCP 工具 | 未接 | 文件/浏览器/命令等 MCP server，按需启用 |
+| 语音外放 | 真实扬声器 + 麦克风组合不误打断 | 连续 10 轮对话无自问自答；说“停”立即停止 |
+| 眼动 | 真实摄像头校准与对象锁定 | 9 点校准可量化；连续注视不重复建会话；点击落在目标内 |
+| 旅游 Demo | 单程三源稳定返回 | 携程/Trip 登录态有效；最低价与打开页面一致 |
+| 编码 Demo | 代码真实执行并播报 | 创建/修改/运行/结果播报闭环 |
+| 端到端 | 语音 + GUI + 编码 + 旅游各一条脚本 | 按 [project-status](./project-status-20261121.md) 验收表执行 |
 
-### 1.4 验收
+## 2. P1：功能补齐
 
-- 20 条固定任务集：简单任务直连成功率 ≥ 95%，P50 延迟 < 1.5s；
-- 复杂任务成功率不低于当前基线，单步 P50 降低 ≥ 30%；
-- 所有工具调用有权限校验、超时、取消、审计日志。
-
----
-
-## 2. UI 升级（交互页面）
-
-### 2.1 目标
-
-从“浮条 + 设置页”升级为可演示的 **CYRVIS 工作台**：
-
-- 语音状态（Sleeping/Listening/Thinking/Speaking/Executing）；
-- 实时转写 + 助手文本 + 任务时间线（步骤、截图缩略图、耗时）；
-- 打断按钮、耳机/外放切换、麦克风/输出设备选择；
-- 权限引导（麦克风/辅助功能/屏幕录制）、首次启动向导；
-- Gaze 状态占位（后续接入）。
-
-### 2.2 模块
-
-| 路径 | 职责 |
-|---|---|
-| `components/CyrvisVoice/` | 现有语音条、WAV 播放器、音频 Hook |
-| `components/CyrvisUI/`（新增） | 工作台页面、任务时间线、设备选择、引导 |
-| `layouts/MainLayout.tsx` | 挂载入口，保持最小改动 |
-
-### 2.3 约束
-
-- 不阻塞语音主链路；UI 只消费 `VoiceUiState` / `ControllerEvent`；
-- GUI 执行时主窗口会隐藏，工作台信息需同步到 widget（或任务结束后回放）；
-- 避免在渲染进程引入大依赖（gaze/图表按需加载）。
-
----
-
-## 3. 眼动（Gaze）
-
-### 3.1 目标
-
-- 眼动作为**指向/候选选择**输入，与语音融合： “打开这个” → gaze 锁定目标 → 语音确认；
-- 先做离线/半自动 Demo：校准、注视点、热区、候选框；
-- 不追求医疗级精度，优先稳定和可解释。
-
-### 3.2 模块
-
-| 路径 | 职责 |
-|---|---|
-| `src/main/cyrvis/gaze/device.ts` | 设备/API 适配（Tobii/WebGaze/摄像头方案待定） |
-| `src/main/cyrvis/gaze/calibration.ts` | 校准流程与误差评估 |
-| `src/main/cyrvis/gaze/fusion.ts` | gaze + voice + 屏幕元素融合，输出候选/指针 |
-| `src/renderer/src/components/CyrvisGaze/` | 校准 UI、注视点可视化、隐私提示 |
-
-### 3.3 验收
-
-- 9 点校准误差可量化；候选选择 Top-1 准确率有基线；
-- 隐私：默认本地处理，不上传摄像头/眼动原始数据。
-
----
-
-## 4. 主动性框架 + 记忆
-
-### 4.1 目标
-
-- Agent 不只是“问答”，而是能记住偏好/历史，并在合适时机主动询问或提醒；
-- 主动行为必须可控：优先级、冷却、免打扰、用户反馈（接受/忽略/关闭）。
-
-### 4.2 模块
-
-| 路径 | 职责 |
-|---|---|
-| `src/main/cyrvis/memory/store.ts` | 短期会话 + 长期偏好/事实，落盘可替换（SQLite/JSON） |
-| `src/main/cyrvis/memory/schema.ts` | 记忆条目、来源、置信度、过期时间 |
-| `src/main/cyrvis/proactivity/policy.ts` | 触发器、优先级、冷却、免打扰 |
-| `src/main/cyrvis/proactivity/triggers.ts` | 空闲、任务完成、日程、周期性问询 |
-| `src/main/cyrvis/proactivity/feedback.ts` | 用户接受/忽略/关闭的反馈学习 |
-
-### 4.3 主动类型（先做 2–3 个）
-
-- 任务完成后：结果摘要 + 下一步建议；
-- 长时间空闲/卡住：询问是否需要帮助；
-- 周期性 check-in：日程/待办/天气等（需用户开启）；
-- 记忆驱动：常用路径、偏好应用、称呼/语言。
-
-### 4.4 验收
-
-- 主动播报不打断用户说话/任务执行；
-- 有全局开关、频率上限、免打扰时段；
-- 每次主动行为可解释（为什么触发、依据哪条记忆）。
-
----
-
-## 5. 模块边界与分支协作
-
-建议分支与目录 ownership（减少冲突）：
-
-| 分支 | 主要目录 | 允许改共享文件 |
+| 项 | 现状 | 下一步 |
 |---|---|---|
-| `feat/gui-accel` | `main/cyrvis/gui/`、`gui-adapter.ts`、`controller.ts` | 需同步 `types.ts` |
-| `feat/mcp-tools` | `main/cyrvis/gui/mcp-bridge.ts`、`packages/` MCP 适配 | 需同步 `types.ts` |
-| `feat/ui` | `renderer/src/components/CyrvisUI/`、`CyrvisVoice/` | 不改主进程 |
-| `feat/gaze` | `main/cyrvis/gaze/`、`renderer/.../CyrvisGaze/` | 需同步 `types.ts` |
-| `feat/proactivity` | `main/cyrvis/proactivity/`、`memory/` | 需同步 `types.ts` |
-| `feat/voice` | `main/cyrvis/voice/`、`capture-service.ts`、`voice-service.ts` | 需同步 `types.ts` |
+| OTA 往返 | 不支持 | Worker 增加 round-trip 查询；或明确 Demo 只做单程 |
+| OTA 稳定性 | 依赖登录态/DOM | 增加登录检测、失败重试与页面结构告警；Trip 结算页补齐 |
+| GUI 提示词 | Doubao Seed 本地任务使用紧凑提示词 | 评估是否仅对“注视绑定”任务启用，避免复杂任务退化 |
+| 眼动执行 | 首次点击约束 + 洋红框 | 真实精度复测；失败时允许重新锁定，不误点 |
+| 播报守卫 | 注视播报 45 秒 readout guard | 确认普通说话是否应打断；保留明确停止词优先 |
+| 历史/重播 | GazeTurn 卡片 + 重播 | 真实语音队列长耗时场景验收 |
 
-共享接口规则：
+## 3. P2：工程化
 
-1. `types.ts` 只加类型，不改已有字段语义；冲突时先合并接口再合并实现。
-2. Task Router / MCP / Gaze 通过**新增接口**接入 Controller，不直接改 `VoiceBrain` 内部。
-3. 任何影响语音打断/采集/播放的改动，必须跑 `voice-architecture.md` 的验收项。
-4. 每个分支至少补对应单测；共享测试集在 `apps/ui-tars/src/main/cyrvis/*.test.ts`。
+| 项 | 说明 |
+|---|---|
+| CI 测试矩阵 | 默认 `vitest` 会加载 e2e/Electron 环境不兼容用例；改用 `vitest.cyrvis.config.ts` + SDK 独立测试 |
+| 隐私与权限 | 自主性、剪贴板/文件感知、眼动截图的开关与脱敏策略 |
+| 性能基准 | GUI 加速 benchmark 已归档；需要时恢复固定任务集与指标 |
+| Provider 生态 | manifest 签名、权限、MCP 生命周期与审计 |
+| macOS/Windows 一致性 | 路径规范化、权限、音频设备、窗口行为 |
+| 文档维护 | 里程碑文档、归档规则、配置/密钥说明（不提交密钥） |
 
----
+## 4. 暂不做
 
-## 6. 里程碑（建议）
-
-| 阶段 | 内容 | 产出 |
-|---|---|---|
-| M1 | Task Router + 3 个简单任务直连（建文件/开 URL/搜索） | 延迟对比报告 |
-| M2 | MCP bridge + 权限/审计 + UI 时间线 | 可演示工作台 |
-| M3 | GUI 加速（Batching/截图去重/loop wait） | 成功率/延迟基线 |
-| M4 | Gaze 校准 + “看哪点哪”Demo | 校准/选择准确率 |
-| M5 | 记忆 + 主动性策略 + 反馈 | 主动 check-in Demo |
-
-> 先做 M1/M2：它们直接改善演示效果，且不依赖新硬件。
+- 不把眼动精度宣传为医疗级或生产级；
+- 不在没有人工确认的情况下自动支付/下单；
+- 不为了 Demo 伪造航班或价格数据；
+- 不直接合并基于旧控制器、未适配当前 main 的分支。

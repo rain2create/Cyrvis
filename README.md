@@ -183,7 +183,8 @@ On first launch:
 | Coding agent: workspace, VS Code, visual scripts | Working      |
 | Live flight comparison across three sources      | Working      |
 | macOS speaker/headset routing                    | Working      |
-| Gaze, proactivity, and long-term memory          | Experimental |
+| Gaze readout and bound desktop execution        | Experimental |
+| Proactivity and long-term memory                 | Experimental |
 | Linux desktop                                    | Not yet      |
 
 CYRVIS is under active development. Model endpoints, audio devices, and OS permissions
@@ -203,16 +204,20 @@ scripts/cyrvis/                      Launch and development helpers
 
 ## Documentation
 
-| Document                                                 | What it covers                                             |
-| -------------------------------------------------------- | ---------------------------------------------------------- |
-| [README.cyrvis.md](./README.cyrvis.md)                   | Detailed Chinese technical overview                        |
-| [doc/README.md](./doc/README.md)                         | Documentation index and code map                           |
-| [doc/architecture.md](./doc/architecture.md)             | Layers, state machine, and interfaces                      |
-| [doc/voice-architecture.md](./doc/voice-architecture.md) | Microphone/playback processes, barge-in, and echo handling |
-| [doc/fast-tool-matrix.md](./doc/fast-tool-matrix.md)     | Fast tools, routing, safety, and MCP                       |
-| [doc/development.md](./doc/development.md)               | Environment, keys, tests, logs, and troubleshooting        |
-| [doc/roadmap.md](./doc/roadmap.md)                       | GUI acceleration, MCP, gaze, proactivity, and memory       |
-| [doc/progress.md](./doc/progress.md)                     | What has been built, in chronological order                |
+| Document                                                              | What it covers                                                    |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [doc/project-status-20261121.md](./doc/project-status-20261121.md)     | **Milestone overview and handoff**: capabilities, pitfalls, TODO  |
+| [doc/architecture.md](./doc/architecture.md)                          | **Current architecture**: layers, modules, flows, contracts       |
+| [README.cyrvis.md](./README.cyrvis.md)                                | Detailed Chinese technical overview                               |
+| [doc/README.md](./doc/README.md)                                      | Documentation index and code map                                  |
+| [doc/voice-architecture.md](./doc/voice-architecture.md)              | Voice current-state note plus historical barge-in/echo details    |
+| [doc/gaze-integration.md](./doc/gaze-integration.md)                  | Gaze calibration, readout chat, proactive reminders, execution    |
+| [doc/fast-tool-matrix.md](./doc/fast-tool-matrix.md)                  | Fast tools, routing, safety, and MCP                              |
+| [doc/cyrvis-orchestration-runtime-20261120.md](./doc/cyrvis-orchestration-runtime-20261120.md) | Orchestration runtime, scheduling, autonomy, capability synthesis |
+| [doc/flight-data.md](./doc/flight-data.md)                            | Real flight sources, OTA login, and one-way limitation            |
+| [doc/development.md](./doc/development.md)                            | Environment, keys, tests, logs, and troubleshooting               |
+| [doc/roadmap.md](./doc/roadmap.md)                                    | Next priorities after the 2026-11-21 milestone                    |
+| [doc/progress.md](./doc/progress.md)                                  | What has been built, in chronological order                       |
 
 ## Built on UI-TARS, maintained as CYRVIS
 

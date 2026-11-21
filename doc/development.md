@@ -72,18 +72,23 @@ pnpm run dev:ui-tars
 
 ## 5. 测试
 
-```bash
+```powershell
 # 类型检查（node + web）
-pnpm --filter ui-tars typecheck
+cd apps/ui-tars
+npx tsc --noEmit -p tsconfig.node.json --composite false
+npx tsc --noEmit -p tsconfig.web.json --composite false
 
-# CYRVIS 单测（Controller / VoiceBrain / IntentGate / Proactivity）
-pnpm --filter ui-tars exec vitest run src/main/cyrvis
+# CYRVIS 主回归（推荐；覆盖 main/cyrvis、眼动、语音、shared）
+npx vitest run --config vitest.cyrvis.config.ts
 
-# 全量单测（可选）
-pnpm test
+# GUI SDK 回归
+cd ../../packages/ui-tars/sdk
+npx vitest run tests/Model.test.ts tests/GUIAgent.test.ts tests/utils.test.ts
 ```
 
-基线：57 个 CYRVIS 单测通过（2026-11-15）。
+> 不要直接用默认 `vitest run` 判断代码失败：它会加载 e2e/Playwright、electron-log、
+> macOS 原生模块和未配置别名的 renderer 用例。当前基线（2026-11-21）：
+> CYRVIS 79 文件 536 用例通过；SDK 32 用例通过；Node/Web typecheck 通过。
 
 ## 6. 日志
 
@@ -106,10 +111,11 @@ pnpm test
 
 | 模式 | 输出 | 语音打断 | 备注 |
 |---|---|---|---|
-| 耳机 | AirPods/默认耳机 | ✅ | 隐藏采集窗口 + 主进程打断检测 |
-| 外放 | 扬声器 | ❌（半双工） | 防自问自答；用 `Ctrl+Alt+X` |
+| 耳机 | AirPods/默认耳机 | ✅ | 主 Renderer 采集 + AEC；能量/文本过滤 |
+| 外放 | 主机扬声器 | ✅ 默认快速路径 | 主麦克风始终 AEC；播放参考互相关 + KWS/声纹；`CYRVIS_SPEAKER_BARGE_FAST=0` 回退 VAD 门控 |
 
-细节见 [voice-architecture.md](./voice-architecture.md)。
+注视播报期间有 readout guard，普通说话不会打断；明确“停/停一下”和界面按钮始终优先。
+细节见 [voice-architecture.md](./voice-architecture.md) 顶部当前说明。
 
 ## 8. 常见故障
 
@@ -117,8 +123,9 @@ pnpm test
 |---|---|
 | `No physical microphone found` | 只枚举到 ToDesk 虚拟麦；连接物理麦，应用会自动重启采集 |
 | AirPods 断连 | Windows 蓝牙省电；重连后 `devicechange` 自动恢复；演示建议 USB 麦 |
-| 外放一直“你好” | 扬声器回声被麦克风收进去；使用外放模式（半双工），不要开语音打断 |
-| 说“停”没反应 | 检查当前是否外放模式；耳机模式才支持语音打断；快捷键 `Ctrl+Alt+X` 始终可用 |
+| 外放一直“你好” | 扬声器回声被麦克风收录；确认主麦克风 AEC 开启、输出模式为外放、KWS/声纹模型可用 |
+| 说“停”没反应 | 确认唤醒/语音已连接；明确停止词优先于 readout guard；快捷键 `Ctrl+Alt+X` 始终可用 |
+| 注视播报时说话停不下来 | 注视播报有 45 秒 readout guard；说“停/停一下”或点停止按钮 |
 | GUI 任务不执行 | 看日志是 `REJECTED`（IntentGate）还是 `UITarsModel` 鉴权错误；创建/新建/写入已加入任务动词 |
 | VLM 401 | Key 类型与 Base URL 不匹配（Plan vs 普通） |
 | VLM 403 | Ark 账户欠费，充值或换 Key |
@@ -129,8 +136,8 @@ pnpm test
 1. `git status` 不包含 `.env`、`*.log`、`*.wav`、`.tmp-*`、`node_modules`、`dist`、`out`；
 2. `git grep -nE 'ark-[0-9a-f]{8}-|sk-ws-|sk-[A-Za-z0-9]{20,}'` 无结果（或都是示例占位符）；
 3. 文档中没有真实 Key、Cookie、个人路径；
-4. `pnpm --filter ui-tars typecheck` 与 CYRVIS 单测通过；
-5. 不在默认分支直接开发，按 `roadmap.md` 的 `feat/*` 分支协作。
+4. Node/Web typecheck 与 `vitest.cyrvis.config.ts` 回归通过；
+5. 新 PR 先适配当前 `main`；旧 `feat/*` 分支仅作历史参考，不再作为合并目标。
 
 ### GitHub 上传范围
 

@@ -1,5 +1,17 @@
 # CYRVIS 调研发现
 
+## 2026-11-21 里程碑复盘
+
+- 外放自打断的根因是“人声 + 扬声器回声”的声学混合，不是单一阈值；最终靠主麦克风 AEC、播放参考互相关、
+  文本回声过滤和 KWS/声纹共同处理。旧隐藏采集窗口（`echoCancellation:false`）不是当前 omni 路径。
+- 眼动 PR 有两条线：#11 适配当前 main/调度层/语音队列；#12 基于旧控制器，眼动核心相同但冲突更多。
+  当前合 #11，不整体合 #12。
+- 旅游数据的核心原则：真实查询、失败明说、不伪造；OTA 只支持单程，往返会退化为 Google。
+- 合并 PR 时必须保留 main 的 pending-intent/确认回声/stop guard/编码进度守卫；
+  PR 自带的“直接执行/无确认”语义不能默认接受。
+- 测试结果要区分代码失败与环境失败：默认 `vitest` 会加载 e2e/Playwright、electron-log、macOS 原生模块
+  和 renderer 别名，CYRVIS 回归应使用 `vitest.cyrvis.config.ts`，SDK 单独跑。
+
 ## 基座代码事实
 | 位置 | 事实 |
 |---|---|

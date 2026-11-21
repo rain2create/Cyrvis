@@ -1,65 +1,44 @@
-# CYRVIS 开发计划（当前阶段）
+# CYRVIS 里程碑收尾计划（2026-11-21）
 
-> 最后更新：2026-11-19
-> 当前阶段：语音与动态工具上下文核心已跑通，继续补齐 Provider 生态、真实性能基准、UI 与主动性能力。
+> 状态：**阶段性收尾**。核心语音、工具、GUI、编码、旅游单程和眼动链路已合入 main；
+> 后续以真实设备验收、演示稳定和按需补齐为主。
+> 旧的 2026-11-19 开发计划已归档到 [archive/plan-20261119.md](./archive/plan-20261119.md)。
 
-## 文档索引
+## 1. 本次收尾目标
 
-| 文档                                                        | 内容                                                                     |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [README.md](./README.md)                                    | 文档总索引与代码地图                                                     |
-| [architecture.md](./architecture.md)                        | 整体框架与可行性分析                                                     |
-| [voice-architecture.md](./voice-architecture.md)            | 当前语音实现（权威）                                                     |
-| [roadmap.md](./roadmap.md)                                  | 后续重点、模块边界、分支 ownership                                       |
-| [gui-acceleration-plan.md](./gui-acceleration-plan.md)      | GUI 加速 benchmark：固定任务、指标、实验变量、ShowUI-2B 方案（不含 MCP） |
-| [development.md](./development.md)                          | 环境、启动、测试、日志、密钥                                             |
-| [progress.md](./progress.md) / [findings.md](./findings.md) | 实时进度与排障结论                                                       |
-| [archive/](./archive/)                                      | 历史方案（product vision v1、voice plan v1）                             |
+- [x] 合并 PR #10：编排运行时、自主性、能力合成、桌面伴侣/工作台 UI。
+- [x] 合并 PR #11：眼动聊天、截图/播报关联、主动提醒、绑定桌面执行、对象吸附。
+- [x] 不合并 PR #12：其眼动核心与 #11 相同，额外改动是外放回声校验和 GUI 输入压缩；
+      当前版本保持 #11 的眼动与 main 的语音行为。
+- [x] 保留 main 的语音行为：确定性确认、pending-intent、确认回声绕过、stop/barge 守卫、
+      编码进度守卫、FIFO 主动播报 + 精确朗读。
+- [x] 整理文档：当前架构、里程碑状态、路线图、历史归档。
+- [x] 验证：Node/Web typecheck；CYRVIS 79 文件 536 用例；SDK 32 用例。
 
-## 目标
+## 2. 收尾后立即要做的验收
 
-在 UI-TARS Desktop 基座上构建 **Voice + Gaze + GUI Control** 桌面助手：
-语音负责对话/决策，Controller 负责任务权威，GUI Agent 负责执行，眼动负责指代，主动性/记忆负责长期协作。
+| 顺序 | 验收 | 通过标准 |
+|---|---|---|
+| 1 | 语音外放 | 连续对话不自打断；“停/停一下”立即停止 |
+| 2 | 眼动 | 校准、看屏、播报、重播、绑定点击各一次 |
+| 3 | 编码 | 创建脚本 → 运行 → 播报真实输出 |
+| 4 | 旅游单程 | 北京 → 三亚，携程/Trip/Google 都有结果，打开最低价页面 |
+| 5 | 危险操作 | 删除/关闭应用触发确认，说“确认执行”后执行 |
+| 6 | 重启恢复 | 完全退出后重开，语音/眼动/历史正常 |
 
-不重写 GUI Agent 基座；CYRVIS 作为外层交互协调层。
+验收发现的问题写入 [findings.md](./findings.md)，不要事后补录。
 
-## 基座
+## 3. 暂停期间的文档规则
 
-- 仓库：`rain2create/CYRVIS`（基于 UI-TARS-desktop fork；GitHub 改名后旧地址会重定向）
-- 本地：`CYRVIS/UI-TARS-desktop`
-- 基线 commit：`3ac2cb8d946d78d5ff92ad17b318eaafa18c178c`（release 0.3.1）
-- 组件：Electron `apps/ui-tars` + `packages/ui-tars/sdk`（GUIAgent）+ nut-js operator
+- 当前实现以 [architecture.md](./architecture.md) 为准；
+- 语音专题以 [voice-architecture.md](./voice-architecture.md) 顶部“当前实现”说明为准；
+- 眼动专题见 [gaze-integration.md](./gaze-integration.md)；
+- 旧计划不再修改，统一放入 `doc/archive/` 并在文件顶部标注归档；
+- 不提交任何 `.env`、Key、Cookie、日志、私人截图。
 
-## 已完成（P0–P2）
+## 4. 恢复开发时的入口
 
-- [x] 基座启动、GUI VLM 配置、真实点击/输入；
-- [x] Controller 单任务状态机、暂停/恢复/取消；
-- [x] VoiceBrain 意图路由、唤醒、确定性控制；
-- [x] Qwen Realtime 端到端语音、Function Calling、主动播报；
-- [x] 语音打断（耳机模式）、双输出模式（耳机/外放）；
-- [x] 采集/播放分进程、物理麦校验、断连恢复；
-- [x] 动态用户上下文、资源目录、能力绑定、上下文相关排序和 Provider 前台激活；
-- [x] 57 个 CYRVIS 单测通过。
-
-## 进行中/下一步（按 roadmap）
-
-| 方向        | 下一步                                                                                                                      | 分支               |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| GUI 加速    | 按 [gui-acceleration-plan.md](./gui-acceleration-plan.md) 跑固定任务 benchmark；先做 loop/截图历史/像素/ShowUI-2B，MCP 暂缓 | `feat/gui-accel`   |
-| UI 升级     | 工作台、任务时间线、设备选择、引导                                                                                          | `feat/ui`          |
-| 眼动        | 校准、注视点、gaze+voice 融合                                                                                               | `feat/gaze`        |
-| 主动性/记忆 | 记忆 schema、触发器、主动 check-in                                                                                          | `feat/proactivity` |
-
-## 约束
-
-1. 任务权威在 Controller；Voice/Gaze 只发结构化事件，不泄漏模型 SDK 类型。
-2. 任何影响语音采集/播放/打断的改动，必须跑 `voice-architecture.md` 验收。
-3. 共享类型 `types.ts` 只加不改语义；跨模块接口先对齐再实现。
-4. 不提交密钥/日志/临时文件；提交前按 `development.md` 检查。
-
-## 当前配置备忘
-
-- 语音：Qwen3.8-Omni-Flash-Realtime（DashScope，本地 `.env`）。
-- GUI VLM：火山方舟 Plan 接口 `https://ark.cn-beijing.volces.com/api/plan/v3`，模型 `doubao-seed-2.1-lite`。
-- 外放模式：半双工，语音打断关闭，`Ctrl+Alt+X` 兜底；耳机模式语音打断可用。
-- 换带杆游戏耳机 + 外放的“语音打断”方案已记录，待验证（见 voice-architecture.md）。
+1. 先读 [project-status-20261121.md](./project-status-20261121.md)；
+2. 按 [roadmap.md](./roadmap.md) 的 P0 验收，再决定 P1；
+3. 任何语音采集/播放/打断改动，先跑 `vitest.cyrvis.config.ts` 和真实设备验收；
+4. PR 必须先 rebase/merge 当前 main，禁止直接合入未适配的旧控制器分支。

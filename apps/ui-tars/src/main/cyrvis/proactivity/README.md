@@ -1,21 +1,20 @@
 # cyrvis/proactivity
 
-归属分支：`xiangli` / `feat/proactivity`
+主动性相关说明入口。当前核心实现在上级 `../proactivity.ts` 与
+`../follow-up-service.ts`，编排/自主性在 `../orchestration/autonomy-engine.ts`。
 
 职责：
 
-- `policy.ts`（见上级 `proactivity.ts`）：任务事件主动播报、冷却、免打扰；
-- `follow-up-service.ts`：启动/激活/解锁问候，带上次任务概况（**已关闭**沉默 10 秒闲置追问）；
-- `travel/`：旅行攻略分层主动性（目的地时间 → 具体点位偏好 → 可执行 Day 方案 → 选定后再给预订链接）。
+- 任务事件（开始/完成/失败/取消）的主动播报、优先级、冷却与免打扰；
+- 启动/激活后的问候与上次任务概况；沉默 10 秒的闲置追问默认关闭；
+- 与眼动主动提醒协调，避免任务播报和注视播报互相打断；
+- 旅行攻略的分层追问由 `intake/` 与 `travel/` 承担，不在本目录重复实现。
 
-旅行流程约束：
+边界：
 
-- 自然问清目的地、出发地、大概日期（禁止「基础框架/立住」硬词）；
-- 偏好用具体点位名试探（如故宫/三里屯），选定后立刻给可执行 Day 方案；
-- 节奏约束只作备注，不当主体；不输出原始 JSON；
-- 门票/酒店先报选项名，用户确认（选1/选项名）后再给该选项链接；禁止 GUI 代订；
-- 换目的地会清空上一程的 aspects/预订确认，避免串台；
-- `travel_finalize_plan` 在桌面生成并打开 **HTML** 计划页；
-- 旅行规划默认走 `travel_*`，仅明确“打开订票网站操作”才 `start_gui_task`。
+- 主动播报必须走 `VoiceBrain` / `provider.speak`，不能绕过语音队列；
+- 高风险动作只建议，不自动执行；
+- 隐私相关感知（剪贴板/文件/截图）必须可关闭。
 
-详见 `doc/roadmap.md` 第 4 节。
+详见 [doc/architecture.md](../../../../../../doc/architecture.md) 与
+[doc/roadmap.md](../../../../../../doc/roadmap.md)。

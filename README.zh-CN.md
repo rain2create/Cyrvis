@@ -178,7 +178,8 @@ macOS 也可以双击 [`start-cyrvis.command`](./start-cyrvis.command)；Windows
 | 编码 Agent：工作区、VS Code、图形脚本 | 可用     |
 | 三站实时航班比价                      | 可用     |
 | macOS 扬声器/耳机切换                 | 可用     |
-| 注视、主动性与长期记忆                | 实验性   |
+| 注视播报与绑定桌面执行                | 实验性   |
+| 主动性与长期记忆                      | 实验性   |
 | Linux 桌面                            | 尚未支持 |
 
 CYRVIS 仍在活跃开发中。模型接口、音频设备和系统权限是常见的踩坑点；
@@ -197,16 +198,20 @@ scripts/cyrvis/                      启动与开发脚本
 
 ## 文档
 
-| 文档                                                     | 内容                              |
-| -------------------------------------------------------- | --------------------------------- |
-| [README.cyrvis.md](./README.cyrvis.md)                   | 详细技术概览                      |
-| [doc/README.md](./doc/README.md)                         | 文档索引与代码地图                |
-| [doc/architecture.md](./doc/architecture.md)             | 分层、状态机与接口                |
-| [doc/voice-architecture.md](./doc/voice-architecture.md) | 采集/播放分进程、打断与回声处理   |
-| [doc/fast-tool-matrix.md](./doc/fast-tool-matrix.md)     | 快速工具、路由、安全与 MCP        |
-| [doc/development.md](./doc/development.md)               | 环境、密钥、测试、日志与故障排查  |
-| [doc/roadmap.md](./doc/roadmap.md)                       | GUI 加速、MCP、注视、主动性与记忆 |
-| [doc/progress.md](./doc/progress.md)                     | 已完成工作的实时记录              |
+| 文档                                                                  | 内容                                   |
+| --------------------------------------------------------------------- | -------------------------------------- |
+| [doc/project-status-20261121.md](./doc/project-status-20261121.md)     | **里程碑总览与交接**：能力、坑、待办   |
+| [doc/architecture.md](./doc/architecture.md)                          | **当前架构**：分层、模块、链路、契约   |
+| [README.cyrvis.md](./README.cyrvis.md)                                | 详细技术概览                           |
+| [doc/README.md](./doc/README.md)                                      | 文档索引与代码地图                     |
+| [doc/voice-architecture.md](./doc/voice-architecture.md)              | 语音当前说明 + 历史打断/回声细节       |
+| [doc/gaze-integration.md](./doc/gaze-integration.md)                  | 眼动校准、播报回执、主动提醒与执行     |
+| [doc/fast-tool-matrix.md](./doc/fast-tool-matrix.md)                  | 快速工具、路由、安全与 MCP             |
+| [doc/cyrvis-orchestration-runtime-20261120.md](./doc/cyrvis-orchestration-runtime-20261120.md) | 编排运行时、调度、自主性与能力合成 |
+| [doc/flight-data.md](./doc/flight-data.md)                            | 真实航班数据源、OTA 登录与单程限制     |
+| [doc/development.md](./doc/development.md)                            | 环境、密钥、测试、日志与故障排查       |
+| [doc/roadmap.md](./doc/roadmap.md)                                    | 里程碑后的优先级                       |
+| [doc/progress.md](./doc/progress.md)                                  | 已完成工作的实时记录                   |
 
 ## 与 UI-TARS 的关系
 
