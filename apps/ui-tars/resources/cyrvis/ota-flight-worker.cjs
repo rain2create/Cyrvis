@@ -7,6 +7,8 @@
  * the brain falls back to Google Flights only.
  */
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { chromium } = require('playwright');
 
 const CHROME_CANDIDATES = [
@@ -14,6 +16,8 @@ const CHROME_CANDIDATES = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
 ].filter(Boolean);
 
 const chromePath = CHROME_CANDIDATES.find((candidate) => fs.existsSync(candidate));
@@ -112,12 +116,15 @@ async function scrapeCtrip(page, context, url) {
         !(price.servicePackage && Number(price.servicePackage.price) > 0),
     );
     if (!priceList.length) continue;
+    // Ctrip's adultPrice is the base fare; adultTax carries airport/fuel
+    // charges. Comparing base fares alone surfaced a 66 CNY HK Express fare
+    // while Trip.com showed 537 CNY for the same flight.
+    const totalOf = (entry) =>
+      Number(entry.adultPrice || 0) + Number(entry.adultTax || 0);
     const bestPrice = priceList.reduce((best, current) =>
-      Number(current.adultPrice || 0) < Number(best.adultPrice || 0)
-        ? current
-        : best,
+      totalOf(current) < totalOf(best) ? current : best,
     );
-    const price = Number(bestPrice.adultPrice || 0);
+    const price = totalOf(bestPrice);
     if (!price) continue;
     const flightNo = flights
       .map((flight) => flight.flightNo || '')
@@ -142,6 +149,9 @@ async function scrapeCtrip(page, context, url) {
       stops,
       direct: stops === 0,
       url,
+      ...(process.env.CYRVIS_OTA_DEBUG === '1'
+        ? { debugPrice: bestPrice }
+        : {}),
     });
   }
   return offers;
@@ -229,10 +239,24 @@ async function main() {
     trip: { ok: false, count: 0, error: null },
   };
   const offers = [];
+  // Price scraping must not share the persistent profile used by the focus
+  // worker: that worker intentionally leaves Chrome open on the winning fare
+  // page, which keeps a SingletonLock and prevents the next comparison from
+  // launching. A fresh temporary profile per search avoids the lock; Ctrip's
+  // homepage still sets the _bfa/FVP cookies needed by batchSearch.
+  const ephemeralProfile = !process.env.CYRVIS_OTA_SEARCH_PROFILE;
   const profileDir =
-    process.env.CYRVIS_OTA_PROFILE ||
-    'C:/Users/Administrator/AppData/Local/CYRVIS/ota-profile';
+    process.env.CYRVIS_OTA_SEARCH_PROFILE ||
+    fs.mkdtempSync(path.join(os.tmpdir(), 'cyrvis-ota-search-'));
   fs.mkdirSync(profileDir, { recursive: true });
+  const cleanupProfile = () => {
+    if (!ephemeralProfile) return;
+    try {
+      fs.rmSync(profileDir, { recursive: true, force: true });
+    } catch {
+      // Best effort: the OS temp cleaner will remove leftovers.
+    }
+  };
   let context;
   try {
     context = await chromium.launchPersistentContext(profileDir, {
@@ -277,9 +301,11 @@ async function main() {
       }),
     );
     if (context) await context.close().catch(() => undefined);
+    cleanupProfile();
     return;
   }
   await context.close().catch(() => undefined);
+  cleanupProfile();
 
   offers.sort((a, b) => a.price - b.price || a.stops - b.stops);
   process.stdout.write(

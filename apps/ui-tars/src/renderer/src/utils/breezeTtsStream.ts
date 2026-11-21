@@ -14,6 +14,28 @@ export const BREEZE_TTS_FIRST_AUDIO_BUFFER_MS = 100;
 export const getAudioStartDelaySeconds = (firstAudioReported: boolean) =>
   firstAudioReported ? 0.02 : BREEZE_TTS_FIRST_AUDIO_BUFFER_MS / 1000;
 
+/**
+ * Route a WebAudio context to a specific output device. Older Electron/OS
+ * builds may not expose setSinkId; in that case playback keeps following the
+ * system default instead of failing.
+ */
+export const applyAudioSink = async (
+  audioContext: AudioContext,
+  deviceId: string,
+): Promise<void> => {
+  const sinkable = audioContext as AudioContext & {
+    setSinkId?: (id: string) => Promise<void>;
+  };
+  if (!sinkable.setSinkId || !deviceId) {
+    return;
+  }
+  try {
+    await sinkable.setSinkId(deviceId === 'default' ? '' : deviceId);
+  } catch (error) {
+    console.warn('[cyrvis] audio output device unavailable', error);
+  }
+};
+
 export type BreezeStreamConfig = {
   wsUrl: string;
   instruction?: string;
@@ -127,6 +149,7 @@ const delay = (ms: number) =>
 export class BreezeStreamingPlayer {
   private socket: WebSocket | null = null;
   private audioContext: AudioContext | null = null;
+  private outputDeviceId = '';
   private sampleRate = 24_000;
   private nextAudioAt = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
@@ -241,7 +264,17 @@ export class BreezeStreamingPlayer {
     if (audioContext.state !== 'running') {
       throw new Error(`Breeze audio context is ${audioContext.state}`);
     }
+    if (this.outputDeviceId) {
+      await applyAudioSink(audioContext, this.outputDeviceId);
+    }
     return audioContext;
+  }
+
+  async setSinkId(deviceId: string): Promise<void> {
+    this.outputDeviceId = deviceId;
+    if (this.audioContext) {
+      await applyAudioSink(this.audioContext, deviceId);
+    }
   }
 
   private handleBinary(data: ArrayBuffer | Blob) {

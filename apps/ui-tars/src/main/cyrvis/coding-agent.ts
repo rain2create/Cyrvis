@@ -47,6 +47,8 @@ export interface CodingTaskSnapshot {
 
 export interface CodingAgentOptions {
   workspace: string;
+  /** Optional directory where the user asked for deliverable files. */
+  outputDir?: string;
   model?: string;
   workerPath?: string;
   maxDurationMs?: number;
@@ -65,6 +67,35 @@ const redactSecrets = (value: string): string =>
     .replace(/sk-[A-Za-z0-9._-]{8,}/g, 'sk-***')
     .replace(/(QWEN_API_KEY\s*=\s*)\S+/gi, '$1***')
     .replace(/(api[_-]?key\s*[:=]\s*)\S+/gi, '$1***');
+
+/**
+ * Qwen Code manages long-running commands with an internal background-shell
+ * status file. Its own polling command (sleep + cat under ~/.qwen/tmp) is
+ * rejected by our shell policy and arrives as "命令失败：Blocked: sleep 3 …".
+ * That is not the user's task failing, so keep it out of the task panel and
+ * the voice progress stream.
+ */
+const isInternalCodingMessage = (message: string, filePath?: string): boolean =>
+  /(?:background[- ]shells?|shell-bg_|\.qwen\/tmp|Blocked:\s*sleep\b)/i.test(
+    `${message} ${filePath || ''}`,
+  );
+
+/**
+ * Coding-specific defaults that the spoken instruction does not carry.
+ * Turtle's `exitonclick()` closes the window on the first click, which made
+ * every heart-window test look like a crash. Keep the window open until the
+ * user closes it with the window button.
+ */
+const withCodingConventions = (instruction: string): string =>
+  [
+    instruction,
+    '',
+    '[CYRVIS 工程约定]',
+    '- macOS 图形脚本（turtle/pygame）使用 turtle.done() 或 screen.mainloop() 保持窗口；不要使用 screen.exitonclick()，让用户点窗口关闭按钮退出。',
+    '- 默认让绘制过程可见：turtle 用 pen.speed(2) 和 screen.tracer(1, 0.01)，不要用 pen.speed(0) 或 screen.tracer(0) 瞬间画完；只有用户明确要求秒出时才瞬间完成。',
+    '- 用户说的英文文件名要按意图拼写：heart 不要写成 hard。',
+    '- 图形脚本写到工作区/输出目录即可，由应用在任务完成后自动运行；不要用后台 shell 启动 GUI。',
+  ].join('\n');
 
 const WORKER_CANDIDATES = (configured?: string): string[] => [
   ...(configured ? [configured] : []),
@@ -205,8 +236,9 @@ export class CodingAgentService {
 
     child.stdin.end(
       `${JSON.stringify({
-        instruction: trimmed,
+        instruction: withCodingConventions(trimmed),
         workspace,
+        outputDir: this.options.outputDir || '',
         model: this.options.model || 'deepseek-flash',
       })}\n`,
     );
@@ -221,6 +253,8 @@ export class CodingAgentService {
     this.current.status = 'cancelled';
     this.current.endedAt = Date.now();
     this.current.error = null;
+    this.current.lastMessage = '编码任务已取消';
+    this.current.lastEvent = null;
     this.clearTimeout();
     this.killWorker();
     this.emitStatus();
@@ -253,6 +287,13 @@ export class CodingAgentService {
       if (this.current.status !== 'running') {
         return;
       }
+      if (isInternalCodingMessage(event.message, event.filePath)) {
+        logger.info('[cyrvis coding] internal progress', {
+          message: event.message.slice(0, 300),
+          filePath: event.filePath,
+        });
+        return;
+      }
       this.current.lastMessage = event.message;
       this.current.lastEvent = {
         tool: event.tool || '',
@@ -264,12 +305,19 @@ export class CodingAgentService {
       };
       if (event.changed && event.filePath && event.ok === true) {
         const resolved = path.resolve(this.current.workspace, event.filePath);
-        const relative = path.relative(this.current.workspace, resolved);
-        const inside =
-          relative === '' ||
-          (!relative.startsWith('..') && !path.isAbsolute(relative));
+        const outputDir = this.options.outputDir
+          ? path.resolve(this.options.outputDir)
+          : '';
+        const inside = (root: string): boolean => {
+          const relative = path.relative(root, resolved);
+          return (
+            relative === '' ||
+            (!relative.startsWith('..') && !path.isAbsolute(relative))
+          );
+        };
         if (
-          inside &&
+          (inside(path.resolve(this.current.workspace)) ||
+            (outputDir !== '' && inside(outputDir))) &&
           !this.current.changedFiles.some(
             (file) => path.resolve(file) === resolved,
           )
@@ -344,6 +392,13 @@ export class CodingAgentService {
     this.current.status = status;
     this.current.endedAt = Date.now();
     this.current.error = error;
+    this.current.lastMessage =
+      status === 'done'
+        ? '编码任务完成'
+        : status === 'failed'
+          ? '编码任务失败'
+          : '编码任务已取消';
+    this.current.lastEvent = null;
     this.clearTimeout();
   }
 

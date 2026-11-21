@@ -77,6 +77,7 @@ type StreamingPlayer = {
   appendText: (text: string) => void;
   finish: () => Promise<void>;
   cancel: () => void;
+  setSinkId?: (deviceId: string) => Promise<void>;
 };
 
 const EMPTY_STATE: VoiceUiState = {
@@ -311,6 +312,13 @@ export function useVoiceAudio() {
     if (epoch !== playerEpochRef.current || !assistantSpeakingRef.current) {
       player.cancel();
       return;
+    }
+    if (outputDeviceIdRef.current && player.setSinkId) {
+      try {
+        await player.setSinkId(outputDeviceIdRef.current);
+      } catch (error) {
+        console.warn('[cyrvis] failed to apply playback device', error);
+      }
     }
     await player.start();
     if (epoch !== playerEpochRef.current || !assistantSpeakingRef.current) {
@@ -575,13 +583,23 @@ export function useVoiceAudio() {
   }, []);
 
   const setOutputDevice = useCallback(
-    async (deviceId: string) => {
+    async (deviceId: string, devices?: OutputDeviceOption[]) => {
       outputDeviceIdRef.current = deviceId;
       setSelectedOutputId(deviceId);
       localStorage.setItem('cyrvis.outputDeviceId', deviceId);
-      const output = outputDevices.find((item) => item.deviceId === deviceId);
+      const output = (devices ?? outputDevices).find(
+        (item) => item.deviceId === deviceId,
+      );
       if (output) {
         await window.electron.voice.setOutput(output.label);
+      }
+      try {
+        await Promise.all([
+          playerRef.current?.setSinkId?.(deviceId),
+          legacyPlayerRef.current?.setSinkId?.(deviceId),
+        ]);
+      } catch (error) {
+        console.warn('[cyrvis] failed to switch playback device', error);
       }
     },
     [outputDevices],
@@ -639,9 +657,27 @@ export function useVoiceAudio() {
       setAudioModeState(mode);
       localStorage.setItem('cyrvis.audioMode', mode);
       await window.electron.voice.setAudioMode(mode);
-      await refreshOutputDevices();
+      const outputs = await refreshOutputDevices();
+      const builtin = outputs.find(
+        (output) =>
+          output.deviceId !== 'default' &&
+          /macbook.*(扬声器|speakers)|built-?in/i.test(output.label),
+      );
+      if (mode === 'speaker' && builtin) {
+        await setOutputDevice(builtin.deviceId, outputs);
+      } else if (mode === 'headset') {
+        const headset =
+          outputs.find(
+            (output) =>
+              output.deviceId !== 'default' &&
+              /cc ultimate|airpods|耳机|headset|bluetooth/i.test(output.label),
+          ) ?? outputs.find((output) => output.deviceId === 'default');
+        if (headset) {
+          await setOutputDevice(headset.deviceId, outputs);
+        }
+      }
     },
-    [refreshOutputDevices],
+    [refreshOutputDevices, setOutputDevice],
   );
 
   const toggleAudioMode = useCallback(
@@ -836,6 +872,16 @@ export function useVoiceAudio() {
       if (output) {
         setSelectedOutputId(output.deviceId);
         outputDeviceIdRef.current = output.deviceId;
+      } else if (nextMode === 'speaker') {
+        const builtin = outputs.find((item) =>
+          /macbook.*(扬声器|speakers)|built-?in/i.test(item.label),
+        );
+        if (builtin) {
+          setSelectedOutputId(builtin.deviceId);
+          outputDeviceIdRef.current = builtin.deviceId;
+          localStorage.setItem('cyrvis.outputDeviceId', builtin.deviceId);
+          await window.electron.voice.setOutput(builtin.label);
+        }
       }
     });
 
@@ -874,6 +920,13 @@ export function useVoiceAudio() {
             (audioError) =>
               console.warn('[cyrvis] omni audio error', audioError),
           );
+          if (outputDeviceIdRef.current) {
+            void legacyPlayerRef.current
+              .setSinkId(outputDeviceIdRef.current)
+              .catch((error) =>
+                console.warn('[cyrvis] failed to apply playback device', error),
+              );
+          }
         }
         legacyPlayerRef.current.play(pcm16);
       }),

@@ -27,9 +27,25 @@ describe('travel flight slots', () => {
     expect(parseTravelDestination('我要买一张从北京去三亚的往返机票')).toBe(
       '三亚',
     );
+    expect(
+      parseTravelDestination(
+        '行，那我就想去三亚吧，从香港到三亚的这个机票信息告诉我。',
+      ),
+    ).toBe('三亚');
     expect(parseTravelDestination('就厦门吧', true)).toBe('厦门');
     expect(parseTravelOrigin('从北京出发')).toBe('北京');
     expect(parseTravelOrigin('北京', true)).toBe('北京');
+    expect(
+      parseTravelOrigin(
+        '呃这样吧，呃帮我订一张香港到三亚的机票，11月27号单程的。',
+      ),
+    ).toBe('香港');
+    expect(
+      parseTravelDestination(
+        '呃这样吧，呃帮我订一张香港到三亚的机票，11月27号单程的。',
+      ),
+    ).toBe('三亚');
+    expect(parseTravelOrigin('帮我订一张香港到三亚的机票')).toBe('香港');
 
     const now = new Date('2026-11-20T10:00:00');
     expect(parseTravelDate('下周五', now)).toBe('2026-11-27');

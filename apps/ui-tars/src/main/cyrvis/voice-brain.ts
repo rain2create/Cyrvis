@@ -31,6 +31,7 @@ import type { IntakeSession, IntakeSlotSpec } from './intake/types';
 import { ProactivityPolicy, type ProactivityOptions } from './proactivity';
 import { classifyVoiceIntent, type VoiceIntentDecision } from './search-intent';
 import { TaskConversationCoordinator } from './task-conversation';
+import { isLikelySpeakerEcho } from './speaker-echo';
 import {
   isExplicitTravelGuiRequest,
   isTravelPlanningText,
@@ -322,6 +323,7 @@ export class VoiceBrain {
   private readonly intakeEngine = new IntakeEngine();
   private readonly intakeScheduler = new IntakeScheduler();
   private travelFlightCompleting = false;
+  private flightComparisonActiveUntil = 0;
   private lastHardStopAt = 0;
   private navigationExecutions = new Set<string>();
   private readonly backgroundToolJobs = new Map<
@@ -640,7 +642,12 @@ export class VoiceBrain {
    * barge is an explicit stop and still clears the intake.
    */
   handleBargeStop(hardStop = false): void {
-    this.handleStopCommand(!hardStop);
+    // An energy barge only interrupts speech. It must not kill a coding task
+    // that runs in the background: in speaker mode the microphone regularly
+    // hears the assistant's own TTS and produces exactly this kind of barge,
+    // which used to cancel coding tasks that the user never asked to stop.
+    // KWS / Ctrl+Alt+X are explicit stops and still cancel everything.
+    this.handleStopCommand(!hardStop, hardStop ? 'all' : 'gui');
   }
 
   sleep(): void {
@@ -1023,6 +1030,17 @@ export class VoiceBrain {
       ['task', 'control'].includes(classifyIntent(text).kind) ||
       (['task', 'navigate', 'search', 'compare'].includes(voiceIntent.mode) &&
         voiceIntent.confidence === 'high');
+
+    // A long verbatim repeat of the assistant's own recent reply is speaker
+    // leakage even when its wording looks actionable ("需要继续完善这个
+    // 任务吗？"). Without this, the brain treated its own question as a user
+    // command and started a fresh coding task.
+    if (!this.isStopCommand(text) && this.isStrongSelfEchoTranscript(text)) {
+      console.log('[cyrvis voice] strong self-echo transcript ignored', text);
+      this.callbacks.onSelfEcho?.();
+      this.provider.cancelResponse();
+      return true;
+    }
 
     // Speaker mode: the mic can pick up the assistant's own voice. If ASR
     // returns a short echo of the last reply ("我在", "我来", "我"), do not
@@ -1409,12 +1427,19 @@ export class VoiceBrain {
       return false;
     }
 
-    if (!isTravelFlightIntent(text)) {
+    const framework = travelPlanner.getSnapshot().framework;
+    // Follow-ups like "有做好比价吗" or "直接告诉我机票" do not contain the
+    // full buy/check phrase, but once a route is known they must still enter
+    // the deterministic flight comparison instead of the highlights probe.
+    const flightFollowUp =
+      Boolean(framework.origin && framework.destination) &&
+      /(?:机票|航班|飞机票|比价)/.test(text);
+    if (!isTravelFlightIntent(text) && !flightFollowUp) {
       return false;
     }
+    this.flightComparisonActiveUntil = Date.now() + 120_000;
     this.provider.cancelResponse();
 
-    const framework = travelPlanner.getSnapshot().framework;
     const destination = parseTravelDestination(text) || framework.destination;
     const origin = parseTravelOrigin(text) || framework.origin;
     // The planner already has what the user said earlier (e.g. "从北京",
@@ -1424,6 +1449,22 @@ export class VoiceBrain {
       parseTravelDate(text) ||
       (framework.startDate ? parseTravelDate(framework.startDate) : undefined);
     const durationDays = parseTravelDurationDays(text);
+    if (
+      departDate &&
+      !/20\d{2}/.test(text) &&
+      Math.abs(new Date(`${departDate}T00:00:00`).getTime() - Date.now()) >
+        300 * 24 * 60 * 60 * 1000
+    ) {
+      const spokenDate = departDate.replace(
+        /^(\d{4})-(\d{2})-(\d{2})$/,
+        '$1年$2月$3日',
+      );
+      this.provider.cancelResponse();
+      this.speakExact(
+        `日期我听到的是 ${spokenDate}，离现在比较远。能再说一遍具体日期吗？`,
+      );
+      return true;
+    }
     if (destination || origin || departDate) {
       travelPlanner.updateFramework({
         destination,
@@ -1487,6 +1528,7 @@ export class VoiceBrain {
     this.intakeScheduler.cancelAll();
     this.intakeEngine.cancel();
     this.travelFlightCompleting = false;
+    this.flightComparisonActiveUntil = 0;
   }
 
   private async completeTravelFlight(): Promise<void> {
@@ -1581,8 +1623,11 @@ export class VoiceBrain {
         // Open immediately: the user should see the live page as soon as the
         // real-data attempt fails, not after the failure speech finishes.
         void this.openTravelBooking(fallbackUrl);
-        const speech =
-          '实时航班查询失败，我先打开 Google Flights 搜索页，你可以在页面上看实时价格。';
+        const spokenDate = departDate.replace(
+          /^(\d{4})-(\d{2})-(\d{2})$/,
+          '$1年$2月$3日',
+        );
+        const speech = `没有查到 ${origin} 到 ${destination} ${spokenDate} 的实时航班，我先打开 Google Flights 搜索页，你可以在页面上看实时价格。`;
         this.taskSpeechGuardUntil = Date.now() + 8_000;
         this.speakExact(speech);
         return;
@@ -1620,6 +1665,7 @@ export class VoiceBrain {
       this.speakExact(speech);
     } finally {
       this.travelFlightCompleting = false;
+      this.flightComparisonActiveUntil = 0;
     }
   }
 
@@ -2296,6 +2342,23 @@ export class VoiceBrain {
           return;
         }
         const query = String(call.args.query || '').trim();
+        if (
+          Date.now() < this.flightComparisonActiveUntil &&
+          /机票|航班|比价|travel|flight|ctrip|trip/i.test(
+            `${query} ${this.lastUserText}`,
+          )
+        ) {
+          this.provider.sendToolResult(
+            call.callId,
+            JSON.stringify({
+              ok: false,
+              code: 'FLIGHT_COMPARISON_RUNNING',
+              message:
+                'A live three-site flight comparison is already running. Do not search the web for flights; wait for its result.',
+            }),
+          );
+          return;
+        }
 
         // "打开B站搜一下猫": keep the search inside Bilibili instead of
         // sending the user to a generic Bing results page.
@@ -2383,6 +2446,23 @@ export class VoiceBrain {
           this.provider.sendToolResult(
             call.callId,
             'ERROR: open_url requires a URL.',
+          );
+          return;
+        }
+        if (
+          Date.now() < this.flightComparisonActiveUntil &&
+          /google\.com\/(?:travel\/flights|search)|ctrip|trip\.com|qunar|fliggy/i.test(
+            url,
+          )
+        ) {
+          this.provider.sendToolResult(
+            call.callId,
+            JSON.stringify({
+              ok: false,
+              code: 'FLIGHT_COMPARISON_RUNNING',
+              message:
+                'A live three-site flight comparison is already running. Do not open a search or booking page; wait for its result.',
+            }),
           );
           return;
         }
@@ -2831,6 +2911,23 @@ export class VoiceBrain {
         }
         const query =
           typeof call.args.query === 'string' ? call.args.query.trim() : '';
+        if (
+          Date.now() < this.flightComparisonActiveUntil &&
+          /google|ctrip|trip|qunar|fliggy|机票|航班|旅行|travel/i.test(
+            `${siteValue} ${query}`,
+          )
+        ) {
+          this.provider.sendToolResult(
+            call.callId,
+            JSON.stringify({
+              ok: false,
+              code: 'FLIGHT_COMPARISON_RUNNING',
+              message:
+                'A live three-site flight comparison is already running. Do not open a travel site; wait for its result.',
+            }),
+          );
+          return;
+        }
         try {
           const result = this.resolveSiteTarget(siteValue, query || undefined);
           if (
@@ -3006,6 +3103,24 @@ export class VoiceBrain {
           );
           break;
         }
+        if (
+          /(?:机票|航班|比价)/.test(this.lastUserText) &&
+          plan.framework.origin &&
+          plan.framework.destination &&
+          plan.framework.startDate
+        ) {
+          this.provider.sendToolResult(
+            call.callId,
+            JSON.stringify(
+              slimTravelResult(plan, {
+                ok: false,
+                message:
+                  'This is a flight/ticket comparison request. Do not probe highlights; run the deterministic flight comparison instead.',
+              }),
+            ),
+          );
+          break;
+        }
         const probed = await probeTravelHighlights(plan.framework);
         if (probed.queries[0]) travelPlanner.noteSearch(probed.queries[0]);
         const snapshot = travelPlanner.setHighlights(probed.highlights);
@@ -3167,6 +3282,18 @@ export class VoiceBrain {
         break;
       }
       case 'travel_search': {
+        if (Date.now() < this.flightComparisonActiveUntil) {
+          this.provider.sendToolResult(
+            call.callId,
+            JSON.stringify({
+              ok: false,
+              code: 'FLIGHT_COMPARISON_RUNNING',
+              message:
+                'A live three-site flight comparison is already running. Do not run travel_search; wait for its result.',
+            }),
+          );
+          break;
+        }
         const plan = travelPlanner.getSnapshot();
         const query =
           call.args.query?.trim() ||
@@ -3668,23 +3795,32 @@ export class VoiceBrain {
     );
   }
 
-  private handleStopCommand(preserveIntake = false): boolean {
+  private handleStopCommand(
+    preserveIntake = false,
+    cancelTasks: 'all' | 'gui' | 'none' = 'all',
+  ): boolean {
     const status = this.controller.getStatus().status;
-    const guiActive = [
-      'starting',
-      'executing',
-      'paused',
-      'cancelling',
-    ].includes(status);
-    const codingActive = this.options.codingAgent?.isBusy() === true;
-    if (Date.now() - this.lastHardStopAt < 1_500) {
+    const guiActive =
+      cancelTasks !== 'none' &&
+      ['starting', 'executing', 'paused', 'cancelling'].includes(status);
+    const codingActive =
+      cancelTasks === 'all' && this.options.codingAgent?.isBusy() === true;
+    if (cancelTasks === 'all' && Date.now() - this.lastHardStopAt < 1_500) {
       return true;
     }
-    this.lastHardStopAt = Date.now();
+    if (cancelTasks === 'all') {
+      this.lastHardStopAt = Date.now();
+    }
     this.pendingBargeStopAt = 0;
     this.provider.cancelResponse();
     this.provider.cancelPendingSpeech?.();
     this.markUserStop(preserveIntake);
+    if (cancelTasks !== 'all') {
+      // A soft barge stops the current answer, not the session. Keep
+      // `userStopped` false so a background coding task can still announce
+      // its progress/result after the 3s reply-suppression window.
+      this.userStopped = false;
+    }
     this.taskConversation.markStopped();
     this.lastDeterministicControl = { kind: 'cancel', at: Date.now() };
     console.info('[cyrvis voice] hard stop', {
@@ -3809,6 +3945,28 @@ export class VoiceBrain {
     }, 300);
   }
 
+  /**
+   * Full-sentence echo detection. `isSelfEchoTranscript` deliberately lets
+   * actionable-looking turns through, which is exactly what a self-echo of
+   * "需要继续完善这个任务吗？" looks like. Require a full sentence so a real
+   * short reply such as "继续完善这个任务" is not discarded.
+   */
+  private isStrongSelfEchoTranscript(text: string): boolean {
+    if (!this.lastAssistantText.trim()) {
+      return false;
+    }
+    const heard = normalize(text).replace(/[，。！？,.!?\s]/g, '');
+    if (heard.length < 12) {
+      return false;
+    }
+    return isLikelySpeakerEcho(
+      text,
+      this.lastAssistantText,
+      Date.now() - this.lastAssistantAudioAt,
+      8_000,
+    );
+  }
+
   private isSelfEchoTranscript(text: string): boolean {
     if (!this.lastAssistantText.trim()) {
       return false;
@@ -3875,9 +4033,9 @@ export class VoiceBrain {
         summary ? `编码任务完成。总结：${summary}` : '编码任务已完成。',
       );
     } else if (snapshot.status === 'failed') {
-      this.speak(`编码任务失败：${snapshot.error || '未知错误'}`);
+      this.speakCodingSummary(`编码任务失败：${snapshot.error || '未知错误'}`);
     } else if (snapshot.status === 'cancelled') {
-      this.speak('编码任务已取消。');
+      this.speakCodingSummary('编码任务已取消。');
     }
   }
 
@@ -3888,6 +4046,13 @@ export class VoiceBrain {
     if (!this.awake) this.wake();
     const now = Date.now();
     const event = snapshot.lastEvent;
+    if (
+      /(?:background[- ]shells?|shell-bg_|\.qwen\/tmp|Blocked:\s*sleep\b)/i.test(
+        `${event?.message || ''} ${event?.filePath || ''} ${snapshot.lastMessage}`,
+      )
+    ) {
+      return;
+    }
     if (!event?.tool) {
       const fallback = snapshot.lastMessage.trim();
       if (!this.lastCodingProgressAt) {
@@ -3902,7 +4067,7 @@ export class VoiceBrain {
       ) {
         this.lastCodingProgressAt = now;
         this.lastCodingProgressMessage = fallback;
-        this.speak(`编码进度：${fallback}`);
+        this.speakCodingProgress(`编码进度：${fallback}`);
       }
       return;
     }
@@ -3918,18 +4083,28 @@ export class VoiceBrain {
       text = `编码进度：已写入 ${file}`;
     } else if (event.tool === 'run_shell_command') {
       if (!isResult) {
-        const command = event.message
-          .replace(/^正在运行命令：/, '')
-          .trim()
-          .slice(0, 90);
-        text = `编码进度：正在运行 ${command}`;
+        // Do not read raw shell command lines aloud. They are long, noisy,
+        // and used to dominate TTS in speaker mode, where the microphone then
+        // heard the assistant itself and cancelled the coding task.
+        return;
       } else {
         const output = this.cleanCodingOutput(
           event.output || event.message.replace(/^命令(?:完成|失败)：/, ''),
         );
-        text = event.ok
-          ? `运行结果：${output || '命令执行完成'}`
-          : `运行失败：${output || '未知错误'}`;
+        if (
+          !event.ok &&
+          /Command is not allowed|Path is outside the workspace|Command directory is outside/i.test(
+            output,
+          )
+        ) {
+          // The raw text contains a whole shell command and used to be read
+          // aloud for half a minute. The model already got the details.
+          text = '编码进度：有个操作被安全策略拦住了，我换个方式继续。';
+        } else {
+          text = event.ok
+            ? `运行结果：${output || '命令执行完成'}`
+            : `运行失败：${output || '未知错误'}`;
+        }
       }
     } else {
       if (!this.lastCodingProgressAt) {
@@ -3950,7 +4125,7 @@ export class VoiceBrain {
     this.lastCodingProgressAt = now;
     this.lastCodingProgressMessage = text;
     console.info('[cyrvis coding] speak progress', { text });
-    this.speak(text);
+    this.speakCodingProgress(text);
   }
 
   private cleanCodingOutput(value: string): string {
@@ -3996,6 +4171,10 @@ export class VoiceBrain {
     // A coding result can be a long paragraph. Keep the speaker-mode energy
     // barge from treating the assistant's own TTS tail as an interruption
     // while it reads the result. KWS stop words and Ctrl+Alt+X still cancel.
+    this.speakCodingProgress(text);
+  }
+
+  private speakCodingProgress(text: string): void {
     this.taskSpeechGuardUntil =
       Date.now() + Math.min(25_000, Math.max(2_500, text.length * 220));
     this.speak(text);

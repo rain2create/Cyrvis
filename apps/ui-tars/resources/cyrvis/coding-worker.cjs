@@ -6,6 +6,7 @@
  * second Electron instance instead of Node. This worker always runs under a
  * real Node executable and speaks newline-delimited JSON to the parent.
  */
+const fs = require('node:fs');
 const path = require('node:path');
 const { query } = require('@qwen-code/sdk');
 
@@ -16,9 +17,19 @@ const SAFE_COMMANDS = [
   /^npx(?:\.cmd)?\s+vitest(?:\s+.*)?$/i,
   /^pytest(?:\s+.*)?$/i,
   /^(?:python(?:3)?(?:\.exe)?|py(?:\.exe)?)\s+(?:(?:-u|-2|-3)\s+)*(?:"[^"]+\.py"|'[^']+\.py'|[A-Za-z]:[\\/][^\s]+\.py|[^\s]+\.py)(?:\s+.*)?$/i,
-  /^python(?:3)?(?:\.exe)?\s+-m\s+pytest(?:\s+.*)?$/i,
+  /^python(?:3)?(?:\.exe)?\s+-m\s+(?:pytest|py_compile)(?:\s+.*)?$/i,
+  // Environment probes are read-only and were the main source of retry loops:
+  // the coding model checked python/matplotlib/turtle, got "Command is not
+  // allowed", then repeated the same check instead of writing code.
+  /^(?:python(?:3)?(?:\.exe)?|py(?:\.exe)?)\s+(?:--version|-V)$/i,
+  /^(?:python(?:3)?(?:\.exe)?|py(?:\.exe)?)\s+-c\s+[\s\S]+$/i,
   /^git(?:\.exe)?\s+(?:status|diff)(?:\s+.*)?$/i,
+  /^git(?:\.exe)?\s+-C\s+(?:"[^"]+"|'[^']+'|\S+)\s+(?:status|diff)(?:\s+.*)?$/i,
   /^(?:dir|ls)(?:\s+.*)?$/i,
+  /^pwd$/i,
+  /^echo(?:\s+[\s\S]*)?$/i,
+  /^(?:which|command\s+-v)\s+[\w./-]+$/i,
+  /^(?:head|tail)\s+(?:-\d+|-n\s+\d+)$/i,
 ];
 
 const redact = (value) =>
@@ -105,26 +116,158 @@ const watchdog = setTimeout(() => {
 }, Number(process.env.CYRV_CODING_TIMEOUT_MS || 120_000));
 watchdog.unref?.();
 
+/**
+ * Canonicalize a path even when its leaf does not exist yet. macOS maps /tmp
+ * to /private/tmp, and the Qwen SDK hands us the canonical spelling; comparing
+ * raw strings would wrongly reject writes inside the workspace.
+ */
+const canonicalPath = (target) => {
+  let current = path.resolve(target);
+  const tail = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(current), ...tail);
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return path.resolve(target);
+      tail.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+};
+
 const isInside = (root, candidate) => {
-  const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(root, candidate);
+  const resolvedRoot = canonicalPath(root);
+  const resolved = canonicalPath(path.resolve(root, candidate));
   return (
     resolved === resolvedRoot || resolved.startsWith(`${resolvedRoot}${path.sep}`)
   );
 };
 
-const unwrapWorkspaceCd = (command, workspace) => {
-  const match = /^cd\s+(?:"([^"]+)"|'([^']+)'|([^&]+?))\s*&&\s*(.+)$/i.exec(
-    command,
-  );
-  if (!match) {
-    return command;
+/**
+ * Split a command into simple pipeline/sequence stages while respecting
+ * quotes. Returns null for constructs that would bypass the allowlist
+ * (background execution, command substitution, file redirection).
+ */
+const splitShellCommand = (command) => {
+  const segments = [];
+  let current = '';
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < command.length; i += 1) {
+    const char = command[i];
+    if (char === '`' || (char === '$' && command[i + 1] === '(')) {
+      return null;
+    }
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (quote) {
+      if (char === '\\' && quote !== "'") {
+        current += char;
+        escaped = true;
+        continue;
+      }
+      current += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === '\n' || char === '\r') return null;
+    if (char === '\\') {
+      current += char;
+      escaped = true;
+      continue;
+    }
+    if (char === ';') {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    if (char === '|' && command[i + 1] === '|') {
+      segments.push(current);
+      current = '';
+      i += 1;
+      continue;
+    }
+    if (char === '&' && command[i + 1] === '&') {
+      segments.push(current);
+      current = '';
+      i += 1;
+      continue;
+    }
+    if (char === '|') {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    if (char === '&') return null;
+    if (char === '>' || char === '<') {
+      // Allow only the stderr merge "2>&1"; all other redirections are denied.
+      if (
+        char === '>' &&
+        command[i - 1] === '2' &&
+        command[i + 1] === '&' &&
+        command[i + 2] === '1'
+      ) {
+        if (!current.endsWith('2')) return null;
+        current = current.slice(0, -1);
+        i += 2;
+        continue;
+      }
+      return null;
+    }
+    current += char;
   }
-  const directory = (match[1] || match[2] || match[3] || '').trim();
-  if (!directory || !isInside(workspace, directory)) {
-    return null;
+  if (quote || escaped) return null;
+  segments.push(current);
+  return segments.map((segment) => segment.trim()).filter(Boolean);
+};
+
+const isSafeShellCommand = (command, workspace, outputDir) => {
+  const segments = splitShellCommand(command);
+  if (!segments || !segments.length) return false;
+  let start = 0;
+  if (/^cd(?:\s|$)/i.test(segments[0])) {
+    const match = /^cd\s+(?:"([^"]+)"|'([^']+)'|(\S+))$/i.exec(segments[0]);
+    if (!match) return false;
+    const directory = (match[1] || match[2] || match[3] || '').trim();
+    if (!directory || directory.startsWith('~') || directory.includes('$')) {
+      return false;
+    }
+    const allowed =
+      isInside(workspace, directory) ||
+      (outputDir && isInside(outputDir, directory));
+    if (!allowed) return false;
+    start = 1;
   }
-  return match[4].trim();
+  if (start >= segments.length) return false;
+  return segments.slice(start).every((segment) => {
+    const gitC = /^git(?:\.exe)?\s+-C\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s+/i.exec(
+      segment,
+    );
+    if (gitC) {
+      const directory = (gitC[1] || gitC[2] || gitC[3] || '').trim();
+      if (
+        !directory ||
+        directory.startsWith('~') ||
+        directory.includes('$')
+      ) {
+        return false;
+      }
+      const allowed =
+        isInside(workspace, directory) ||
+        (outputDir && isInside(outputDir, directory));
+      if (!allowed) return false;
+    }
+    return SAFE_COMMANDS.some((pattern) => pattern.test(segment));
+  });
 };
 
 let input = '';
@@ -138,8 +281,14 @@ process.stdin.on('end', () => {
 
 async function run(config) {
   const workspace = path.resolve(config.workspace || process.cwd());
+  const outputDir = config.outputDir
+    ? path.resolve(config.outputDir)
+    : '';
   const model = config.model || 'deepseek-flash';
   const apiKey = process.env.QWEN_API_KEY || '';
+  // Deliverables written outside the workspace may be read back so the model
+  // can verify its own output. Existing desktop files are not browsable.
+  const writtenOutputPaths = new Set();
   if (!apiKey) {
     finish({ type: 'result', ok: false, error: 'QWEN_API_KEY is not set' });
     return;
@@ -147,22 +296,43 @@ async function run(config) {
 
   const canUseTool = async (toolName, toolInput) => {
     const filePath = String(toolInput.file_path || toolInput.path || '');
-    if (filePath && !isInside(workspace, filePath)) {
-      return { behavior: 'deny', message: 'Path is outside the workspace.' };
+    if (filePath) {
+      // Reads stay confined to the workspace. Deliverables may be written to
+      // an explicit output directory (macOS Desktop by default) when the user
+      // asks for a file there; without this, "create heart.py on the desktop"
+      // could never succeed. A file written there can then be read back for
+      // verification, but unrelated desktop files stay private.
+      const canonicalFile = canonicalPath(filePath);
+      const inWorkspace = isInside(workspace, filePath);
+      const inOutput = outputDir !== '' && isInside(outputDir, filePath);
+      let allowed = inWorkspace;
+      if (!allowed && inOutput) {
+        if (WRITE_TOOLS.has(toolName)) {
+          writtenOutputPaths.add(canonicalFile);
+          allowed = true;
+        } else {
+          allowed = writtenOutputPaths.has(canonicalFile);
+        }
+      }
+      if (!allowed) {
+        return { behavior: 'deny', message: 'Path is outside the workspace.' };
+      }
     }
     if (toolName === 'run_shell_command') {
       const command = String(toolInput.command || '').trim();
       const directory = String(toolInput.directory || workspace);
-      if (!isInside(workspace, directory)) {
+      const directoryAllowed =
+        isInside(workspace, directory) ||
+        (outputDir !== '' && isInside(outputDir, directory));
+      if (!directoryAllowed) {
         return { behavior: 'deny', message: 'Command directory is outside the workspace.' };
       }
-      const effective = unwrapWorkspaceCd(command, workspace);
-      if (
-        !effective ||
-        !SAFE_COMMANDS.some((pattern) => pattern.test(effective))
-      ) {
+      if (!isSafeShellCommand(command, workspace, outputDir)) {
         send({ type: 'permission', tool: toolName, command, allowed: false });
-        return { behavior: 'deny', message: `Command is not allowed: ${command}` };
+        return {
+          behavior: 'deny',
+          message: `Command is not allowed: ${command}. Write the code to a file in the workspace and run it with python3/node, or use only ls/pwd/which/head/tail/echo and the python -c form.`,
+        };
       }
       send({ type: 'permission', tool: toolName, command, allowed: true });
     }

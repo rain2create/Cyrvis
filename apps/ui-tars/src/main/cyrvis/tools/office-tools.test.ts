@@ -159,7 +159,8 @@ describe('office.create_presentation', () => {
       },
     });
     expect(host.createPresentation).not.toHaveBeenCalled();
-    expect(host.openPath).toHaveBeenCalledWith(target);
+    // macOS /var is a symlink to /private/var; compare the canonical path.
+    expect(host.openPath).toHaveBeenCalledWith(await fs.realpath(target));
     expect(reportProgress).toHaveBeenCalledWith('正在整理演示内容。', 8);
     expect(reportProgress).toHaveBeenCalledWith('正在规划演示结构。', 28);
     expect(reportProgress).toHaveBeenCalledWith('正在下载并校验演示文稿。', 82);

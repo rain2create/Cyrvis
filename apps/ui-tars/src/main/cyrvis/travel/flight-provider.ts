@@ -51,6 +51,8 @@ const CITY_TO_IATA: Record<string, string> = {
   三亚: 'SYX',
   海口: 'HAK',
   厦门: 'XMN',
+  鼓浪屿: 'XMN',
+  厦门鼓浪屿: 'XMN',
   青岛: 'TAO',
   大连: 'DLC',
   天津: 'TSN',

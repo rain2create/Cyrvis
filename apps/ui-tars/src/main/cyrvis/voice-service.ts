@@ -15,7 +15,7 @@ import { updateCompanionTasks } from '@main/window/companionWindow';
  * Copyright (c) 2025 Bytedance, Inc. and its affiliates.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -104,6 +104,41 @@ const runtimeTaskHeartbeatText = (task: RuntimeTask): string => {
   const progress =
     typeof percent === 'number' ? `，当前进度约 ${percent}%` : '';
   return `${title}${progress}。${runtimeTaskActivity(task)}。`;
+};
+
+const CODING_AUTORUN_DENY =
+  /(不要运行|别运行|不用运行|只创建|不要打开|别打开|不要执行|别执行)/i;
+const CODING_AUTORUN_HINT =
+  /(运行|执行|打开|看看|效果|显示|绘制|画|图形|窗口|turtle|pygame|matplotlib|图像|图片|image|png)/i;
+
+const shouldAutoRunCodingFile = (
+  instruction: string | null,
+  file: string,
+): boolean => {
+  if (!file || !/\.py$/i.test(file)) return false;
+  const text = instruction || '';
+  if (CODING_AUTORUN_DENY.test(text)) return false;
+  return CODING_AUTORUN_HINT.test(text);
+};
+
+const autoRunCodingFile = (instruction: string | null, file: string): void => {
+  if (!shouldAutoRunCodingFile(instruction, file)) return;
+  const python = process.env.CYRVIS_CODING_PYTHON?.trim() || 'python3';
+  try {
+    const child = spawn(python, [file], {
+      cwd: path.dirname(file),
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.on('error', (error) => {
+      logger.warn('[cyrvis coding] auto-run failed', error);
+    });
+    child.unref();
+    logger.info('[cyrvis coding] auto-run', { file, python });
+    emitActivity('task', `已运行 ${path.basename(file)}，窗口应该已经打开`);
+  } catch (error) {
+    logger.warn('[cyrvis coding] auto-run failed', error);
+  }
 };
 
 let service: VoiceService | null = null;
@@ -2041,14 +2076,27 @@ export const startVoiceService = (): VoiceService | null => {
   // secretlint-enable @secretlint/secretlint-rule-pattern
 
   const controller = new CyrvisController(new ElectronGUIAdapter());
+  const defaultCodingWorkspace =
+    process.platform === 'win32'
+      ? 'D:\\Desktop\\project\\CYRVIS-demo'
+      : path.join(os.homedir(), 'Desktop', 'projects', 'cyrvis-coding');
+  // The coding route (Qwen Code SDK) accepts deepseek-flash/deepseek-v4-pro,
+  // not the chat-completions model ids from CONVERSATION_MODEL_NAME.
+  const codingModel =
+    process.env.CYRVIS_CODING_MODEL?.trim() || 'deepseek-flash';
+  const codingOutputDir =
+    process.env.CYRVIS_CODING_OUTPUT_DIR?.trim() ||
+    path.join(os.homedir(), 'Desktop');
   const codingAgent = new CodingAgentService({
     workspace:
-      process.env.CYRVIS_CODING_WORKSPACE?.trim() ||
-      'D:\\Desktop\\project\\CYRVIS-demo',
+      process.env.CYRVIS_CODING_WORKSPACE?.trim() || defaultCodingWorkspace,
+    outputDir: codingOutputDir,
+    model: codingModel,
   });
   logger.info('[cyrvis coding] configured', {
     workspace: codingAgent.getWorkspace(),
-    model: process.env.CYRVIS_CODING_MODEL || 'deepseek-flash',
+    outputDir: codingOutputDir,
+    model: codingModel,
   });
   const companionStore = getCompanionStore();
   const desktopHost = new LocalDesktopHost();
@@ -2665,7 +2713,14 @@ export const startVoiceService = (): VoiceService | null => {
   codingAgent.setStatusListener((snapshot) => {
     broadcastTaskStack();
     if (snapshot.status === 'running' && snapshot.lastMessage) {
-      emitActivity('task', `编码进度：${snapshot.lastMessage}`);
+      const internal = `${snapshot.lastMessage} ${snapshot.lastEvent?.filePath || ''}`;
+      if (
+        !/(?:background[- ]shells?|shell-bg_|\.qwen\/tmp|Blocked:\s*sleep\b)/i.test(
+          internal,
+        )
+      ) {
+        emitActivity('task', `编码进度：${snapshot.lastMessage}`);
+      }
     }
     brain.notifyCodingStatus(snapshot);
     if (snapshot.status === 'done') {
@@ -2673,12 +2728,17 @@ export const startVoiceService = (): VoiceService | null => {
         snapshot.changedFiles[snapshot.changedFiles.length - 1] ||
         snapshot.workspace;
       emitActivity('task', `编码任务完成，正在打开 VS Code：${target}`);
-      void openApp('vscode', target).catch((error: unknown) => {
-        logger.warn('[cyrvis coding] open vscode failed', error);
-        return openApp('explorer', target).catch((fallbackError: unknown) => {
-          logger.warn('[cyrvis coding] open workspace failed', fallbackError);
+      void openApp('vscode', target)
+        .catch((error: unknown) => {
+          logger.warn('[cyrvis coding] open vscode failed', error);
+          return openApp('explorer', target).catch((fallbackError: unknown) => {
+            logger.warn('[cyrvis coding] open workspace failed', fallbackError);
+          });
+        })
+        .finally(() => {
+          // Open the editor first, then let the GUI window come to the front.
+          autoRunCodingFile(snapshot.instruction, target);
         });
-      });
     }
   });
 

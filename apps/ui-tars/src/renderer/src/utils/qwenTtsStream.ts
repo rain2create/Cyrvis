@@ -11,6 +11,7 @@ import type {
 
 import {
   BREEZE_TTS_FIRST_AUDIO_BUFFER_MS,
+  applyAudioSink,
   getAudioStartDelaySeconds,
   pcm16ToFloat32,
   takeTtsChunks,
@@ -45,6 +46,7 @@ export class QwenTtsStreamingPlayer {
   private unsubscribe: (() => void) | null = null;
   private audioContext: AudioContext | null = null;
   private audioContextPromise: Promise<AudioContext> | null = null;
+  private outputDeviceId = '';
   private sampleRate = 24_000;
   private nextAudioAt = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
@@ -84,10 +86,20 @@ export class QwenTtsStreamingPlayer {
         if (audioContext.state !== 'running') {
           throw new Error(`Qwen TTS audio context is ${audioContext.state}`);
         }
+        if (this.outputDeviceId) {
+          await applyAudioSink(audioContext, this.outputDeviceId);
+        }
         return audioContext;
       })();
     }
     return this.audioContextPromise;
+  }
+
+  async setSinkId(deviceId: string): Promise<void> {
+    this.outputDeviceId = deviceId;
+    if (this.audioContext) {
+      await applyAudioSink(this.audioContext, deviceId);
+    }
   }
 
   private async schedulePcm(buffer: ArrayBuffer) {

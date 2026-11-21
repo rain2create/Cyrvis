@@ -7,15 +7,21 @@
  * put the user in front of the exact flight the assistant recommended.
  */
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { chromium } = require('playwright');
 
 const profile =
   process.env.CYRVIS_OTA_PROFILE ||
-  'C:/Users/Administrator/AppData/Local/CYRVIS/ota-profile';
+  (process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Application Support', 'CYRVIS', 'ota-profile')
+    : 'C:/Users/Administrator/AppData/Local/CYRVIS/ota-profile');
 const chrome = [
   process.env.CYRVIS_OTA_CHROME,
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
 ].filter(Boolean).find((name) => fs.existsSync(name));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

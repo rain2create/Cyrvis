@@ -43,3 +43,6 @@ cyrvis-runtime/
 apps/ui-tars/cyrvis-runtime/
 cyrvis-user-timeline.json
 apps/ui-tars/cyrvis-user-timeline.json
+
+# Locally downloaded sherpa-onnx KWS models
+models/

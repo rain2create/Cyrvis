@@ -1,5 +1,6 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -247,6 +248,27 @@ export const openApp = async (
   const trimmedTarget = target?.trim() || '';
   switch (app) {
     case 'vscode': {
+      if (process.platform === 'darwin') {
+        // `open -a` handles both the app bundle and opening a file/folder in
+        // it. `findVscode` only knows Windows install locations.
+        const names = ['Visual Studio Code', 'Visual Studio Code - Insiders'];
+        let lastError: unknown;
+        for (const name of names) {
+          try {
+            await execFileAsync(
+              'open',
+              ['-a', name, ...(trimmedTarget ? [trimmedTarget] : [])],
+              { timeout: 5_000 },
+            );
+            return { app, target: trimmedTarget || null };
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError instanceof Error
+          ? lastError
+          : new Error('VS Code executable was not found');
+      }
       const executable = findVscode();
       if (!executable) {
         throw new Error('VS Code executable was not found');
@@ -273,6 +295,17 @@ export const openApp = async (
       return { app, target: url };
     }
     case 'explorer': {
+      if (process.platform === 'darwin') {
+        // macOS has Finder, not explorer.exe.
+        await execFileAsync(
+          'open',
+          trimmedTarget
+            ? ['-R', trimmedTarget]
+            : [path.join(os.homedir(), 'Desktop')],
+          { timeout: 5_000 },
+        );
+        return { app, target: trimmedTarget || null };
+      }
       const pid = await spawnDetached(
         'explorer.exe',
         trimmedTarget ? [trimmedTarget] : [],

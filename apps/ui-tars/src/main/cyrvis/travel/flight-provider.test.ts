@@ -15,6 +15,8 @@ describe('live flight provider', () => {
     expect(resolveCityIata('北京')).toBe('BJS');
     expect(resolveCityIata('三亚市')).toBe('SYX');
     expect(resolveCityIata('上海')).toBe('SHA');
+    expect(resolveCityIata('鼓浪屿')).toBe('XMN');
+    expect(resolveCityIata('厦门鼓浪屿')).toBe('XMN');
     expect(resolveCityIata('NCE')).toBe('NCE');
     expect(resolveCityIata('不存在的城市')).toBeUndefined();
   });

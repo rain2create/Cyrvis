@@ -30,7 +30,7 @@ describe('TravelPlanner', () => {
 
   it('collects framework then enters preference probing', () => {
     const first = planner.updateFramework({
-      userText: '给我看看去巴黎的机票',
+      userText: '给我看看去巴黎的旅行攻略',
     });
     expect(first.phase).toBe('collecting_framework');
     expect(first.framework.destination).toBe('巴黎');
@@ -190,6 +190,20 @@ describe('TravelPlanner', () => {
     expect(confirmed.speakHint).toMatch(/https?:\/\//);
     expect(confirmed.speakHint).toMatch(/选定了|预订链接/);
     expect(confirmed.confirmedBookings.length).toBeGreaterThan(0);
+  });
+
+  it('flight wording from Beijing to Sanya goes ticket-first, not highlights', () => {
+    const framed = planner.updateFramework({
+      destination: '三亚',
+      origin: '北京',
+      startDate: '2026-11-27',
+      transport: '机票',
+      userText: '我从北京去三亚，11月27号出发，一个人，给我订张机票',
+    });
+    expect(framed.missingFramework).toEqual([]);
+    expect(framed.speakHint).toMatch(/travel_expand_aspect|tickets/);
+    expect(framed.speakHint).not.toMatch(/请先调用 travel_probe_highlights/);
+    expect(framed.phase).toBe('awaiting_expand_choice');
   });
 
   it('any destination reservation gets options first, link only after pick', () => {

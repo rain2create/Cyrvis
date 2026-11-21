@@ -110,6 +110,9 @@ export const parseTravelDestination = (
   const patterns = [
     /(?:买|订|查|比价)?(?:一张)?(?:去|到|飞往)([一-龥]{2,10}?)(?:的)?(?:单程|往返|来回)?(?:机票|航班|飞机票)/,
     /(?:去|到|飞往)([一-龥]{2,10}?)(?:的)?(?:单程|往返|来回)?(?:玩|旅游|旅行|度假|的机票)/,
+    // "去三亚吧" / "到三亚的这个机票" / "到三亚的" — the suffix may be a
+    // discourse particle or "这个" instead of a direct 机票 token.
+    /(?:去|到|飞往)([一-龥]{2,8}?)(?:吧|了|呀|的|这个|那个|，|。|$)/,
     /(?:去|到|飞往)([一-龥]{2,10})$/,
     /([一-龥]{2,8})(?:的)?(?:机票|航班|飞机票)/,
     /(?:就|选|定|要)([一-龥]{2,8})(?:吧|了|呀)?$/,
@@ -150,6 +153,27 @@ export const parseTravelOrigin = (
     raw.match(/从([一-龥]{2,10}?)(?:出发|飞|走|到|去)/) ||
     raw.match(/([一-龥]{2,10}?)出发/);
   if (match?.[1]) return cleanCity(match[1]);
+
+  // "香港到三亚的机票" / "香港去三亚" without "从". Capture the text before
+  // the route separator, then strip request fillers ("帮我订一张").
+  const route = raw.match(
+    /([一-龥]{2,16}?)(?:到|去|飞往)([一-龥]{2,10}?)(?:的)?(?:单程|往返|来回)?(?:机票|航班|飞机票|玩|旅游|旅行|度假)?/,
+  );
+  if (route?.[1]) {
+    const candidate = route[1].replace(
+      /^(?:呃|啊|哦|嗯|诶|这样吧|好吧|那|就|帮我|给我|我要|我想|想要|订|买|查|一张|一趟|的|要)+/g,
+      '',
+    );
+    if (
+      candidate.length >= 2 &&
+      candidate.length <= 10 &&
+      !looksLikeQuestion(candidate) &&
+      !/(?:帮|我|订|买|一张|机票|航班|单程|往返)/.test(candidate)
+    ) {
+      return cleanCity(candidate);
+    }
+  }
+
   if (expected) {
     const first = raw.split(/[，,、\s]/)[0] || '';
     if (

@@ -15,6 +15,7 @@ import type {
   VoiceToolCallWithId,
 } from './voice/provider';
 import { VoiceBrain, type VoiceBrainCallbacks } from './voice-brain';
+import { travelPlanner } from './travel/travel-planner';
 import { parseGazeSuggestion } from './gaze/suggestions';
 import type { GazeActionContext } from './gaze/actions';
 
@@ -928,6 +929,392 @@ describe('VoiceBrain', () => {
     expect(opened).toEqual([searchUrl]);
   });
 
+  it('compares Google + Ctrip + Trip and opens the cheapest source', async () => {
+    travelPlanner.reset();
+    const opened: string[] = [];
+    const googleUrl = 'https://www.google.com/travel/flights?q=BJS-SYX';
+    const ctripUrl =
+      'https://flights.ctrip.com/online/list/oneway-bjs-syx?depdate=2026-11-27';
+    const tripUrl =
+      'https://www.trip.com/flights/showfarefirst?dcity=BJS&acity=SYX';
+    const { brain, provider } = setup({
+      requireWakeWord: false,
+      useLiveFlights: true,
+      useOtaFlights: true,
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+      travelBookingOpenDelayMs: 10,
+      flightSearch: async () => ({
+        source: 'google_flights',
+        searchUrl: googleUrl,
+        offers: [
+          {
+            id: 'ZH-2340',
+            providerId: 'ZH',
+            provider: '深航',
+            title: '深航 BJS → SYX',
+            totalPrice: 2340,
+            currency: 'CNY',
+            url: googleUrl,
+            conditions: {
+              direct: false,
+              transferCount: 1,
+              baggageKg: 0,
+              refundable: false,
+              departureTime: '21:15',
+            },
+            departTime: '21:15',
+            metadata: { live: true },
+          },
+        ],
+      }),
+      otaSearch: async () => ({
+        offers: [
+          {
+            id: 'ctrip-3U6308',
+            providerId: 'ctrip',
+            provider: '四川航空',
+            title: '携程 四川航空 3U6308',
+            totalPrice: 1650,
+            currency: 'CNY',
+            url: ctripUrl,
+            conditions: {
+              direct: true,
+              transferCount: 0,
+              baggageKg: 0,
+              refundable: false,
+              departureTime: '21:55',
+            },
+            departTime: '21:55',
+            metadata: {
+              live: true,
+              source: 'ctrip',
+              sourceLabel: '携程',
+              flightNo: '3U6308',
+            },
+          },
+          {
+            id: 'trip-HU7479',
+            providerId: 'trip',
+            provider: '海南航空',
+            title: 'Trip 海南航空 HU7479',
+            totalPrice: 1800,
+            currency: 'CNY',
+            url: tripUrl,
+            conditions: {
+              direct: true,
+              transferCount: 0,
+              baggageKg: 0,
+              refundable: false,
+              departureTime: '15:00',
+            },
+            departTime: '15:00',
+            metadata: {
+              live: true,
+              source: 'trip',
+              sourceLabel: 'Trip.com',
+              flightNo: 'HU7479',
+            },
+          },
+        ],
+        sources: {
+          ctrip: { ok: true, count: 1, error: null },
+          trip: { ok: true, count: 1, error: null },
+        },
+      }),
+    });
+    // Do not spawn the real OTA focus worker (visible Chrome) in tests.
+    const previousOta = process.env.CYRVIS_OTA_ENABLED;
+    process.env.CYRVIS_OTA_ENABLED = '0';
+    try {
+      await brain.start();
+      provider.emitTranscript('我要买一张去三亚的机票', true);
+      await flush();
+      expect(provider.spoken.join(' ')).not.toContain('去哪个城市');
+      expect(provider.spoken.at(-1)).toContain('从哪个城市出发');
+
+      provider.emitTranscript('北京，11月27号，单程', true);
+      await flush();
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+
+      const speech = provider.spoken.join(' ');
+      expect(speech).toContain('携程');
+      expect(speech).toContain('Trip.com');
+      expect(speech).toContain('1650');
+      expect(opened).toEqual([ctripUrl]);
+    } finally {
+      if (previousOta === undefined) {
+        delete process.env.CYRVIS_OTA_ENABLED;
+      } else {
+        process.env.CYRVIS_OTA_ENABLED = previousOta;
+      }
+    }
+  });
+
+  it('overrides a stale planner origin with the newly spoken Hong Kong route', async () => {
+    travelPlanner.reset();
+    let captured: FlightSearchInput | null = null;
+    const opened: string[] = [];
+    const { brain, provider } = setup({
+      requireWakeWord: false,
+      useLiveFlights: true,
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+      travelBookingOpenDelayMs: 10,
+      flightSearch: async (input) => {
+        captured = input;
+        return {
+          source: 'google_flights',
+          searchUrl: 'https://www.google.com/travel/flights?q=HKG-SYX',
+          offers: [
+            {
+              id: 'CX-1',
+              providerId: 'CX',
+              provider: '国泰',
+              title: '国泰 HKG → SYX',
+              totalPrice: 1800,
+              currency: 'CNY',
+              url: 'https://www.google.com/travel/flights?q=HKG-SYX',
+              conditions: {
+                direct: true,
+                transferCount: 0,
+                baggageKg: 0,
+                refundable: false,
+                departureTime: '09:00',
+              },
+              departTime: '09:00',
+              metadata: { live: true },
+            },
+          ],
+        };
+      },
+    });
+    await brain.start();
+
+    provider.emitToolCall({
+      name: 'travel_update_plan',
+      args: { origin: '北京', destination: '三亚', start_date: '2026-11-27' },
+      callId: 'seed-bjs',
+    });
+    await flush();
+    provider.emitTranscript(
+      '帮我订一张香港到三亚的机票，11月27号单程的。',
+      true,
+    );
+    await flush();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    expect(captured).not.toBeNull();
+    expect(captured!.origin).toBe('香港');
+    expect(captured!.destination).toBe('三亚');
+    expect(captured!.departDate).toBe('2026-11-27');
+    expect(opened[0]).toContain('HKG');
+  });
+
+  it('asks again when ASR turns 11月27号 into a far-future 11月7号', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-21T10:00:00'));
+    travelPlanner.reset();
+    let searched = false;
+    const { brain, provider } = setup({
+      requireWakeWord: false,
+      useLiveFlights: true,
+      flightSearch: async () => {
+        searched = true;
+        throw new Error('should not search');
+      },
+      openExternal: async () => undefined,
+    });
+    await brain.start();
+    provider.emitTranscript(
+      '帮我订一张香港到三亚的机票，11月7号单程的。',
+      true,
+    );
+    await flush();
+
+    expect(provider.spoken.at(-1)).toContain('离现在比较远');
+    expect(searched).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('runs the flight comparison when the user says highlights but wants tickets', async () => {
+    travelPlanner.reset();
+    let captured: FlightSearchInput | null = null;
+    const opened: string[] = [];
+    const { brain, provider } = setup({
+      requireWakeWord: false,
+      useLiveFlights: true,
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+      travelBookingOpenDelayMs: 10,
+      flightSearch: async (input) => {
+        captured = input;
+        return {
+          source: 'google_flights',
+          searchUrl: 'https://www.google.com/travel/flights?q=HKG-SYX',
+          offers: [
+            {
+              id: 'CX-1',
+              providerId: 'CX',
+              provider: '国泰',
+              title: '国泰 HKG → SYX',
+              totalPrice: 1800,
+              currency: 'CNY',
+              url: 'https://www.google.com/travel/flights?q=HKG-SYX',
+              conditions: {
+                direct: true,
+                transferCount: 0,
+                baggageKg: 0,
+                refundable: false,
+                departureTime: '09:00',
+              },
+              departTime: '09:00',
+              metadata: { live: true },
+            },
+          ],
+        };
+      },
+    });
+    await brain.start();
+
+    provider.emitToolCall({
+      name: 'travel_update_plan',
+      args: { origin: '香港', destination: '三亚', start_date: '2026-11-27' },
+      callId: 'seed-hkg-followup',
+    });
+    await flush();
+    provider.emitTranscript('亮点，直接告诉我机票就行了。', true);
+    await flush();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    expect(captured).not.toBeNull();
+    expect(captured!.origin).toBe('香港');
+    expect(captured!.destination).toBe('三亚');
+    expect(captured!.departDate).toBe('2026-11-27');
+    expect(opened[0]).toContain('HKG');
+  });
+
+  it('overrides a stale 厦门鼓浪屿 plan when the user switches to 三亚', async () => {
+    travelPlanner.reset();
+    let captured: FlightSearchInput | null = null;
+    const opened: string[] = [];
+    const { brain, provider } = setup({
+      requireWakeWord: false,
+      useLiveFlights: true,
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+      travelBookingOpenDelayMs: 10,
+      flightSearch: async (input) => {
+        captured = input;
+        return {
+          source: 'google_flights',
+          searchUrl: 'https://www.google.com/travel/flights?q=HKG-SYX',
+          offers: [
+            {
+              id: 'CX-1',
+              providerId: 'CX',
+              provider: '国泰',
+              title: '国泰 HKG → SYX',
+              totalPrice: 1800,
+              currency: 'CNY',
+              url: 'https://www.google.com/travel/flights?q=HKG-SYX',
+              conditions: {
+                direct: true,
+                transferCount: 0,
+                baggageKg: 0,
+                refundable: false,
+                departureTime: '09:00',
+              },
+              departTime: '09:00',
+              metadata: { live: true },
+            },
+          ],
+        };
+      },
+    });
+    await brain.start();
+
+    provider.emitToolCall({
+      name: 'travel_update_plan',
+      args: {
+        origin: '香港',
+        destination: '厦门鼓浪屿',
+        start_date: '2026-11-27',
+      },
+      callId: 'seed-xmn',
+    });
+    await flush();
+    provider.emitTranscript(
+      '行，那我就想去三亚吧，从香港到三亚的这个机票信息告诉我。',
+      true,
+    );
+    await flush();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    expect(captured).not.toBeNull();
+    expect(captured!.origin).toBe('香港');
+    expect(captured!.destination).toBe('三亚');
+    expect(captured!.departDate).toBe('2026-11-27');
+    expect(opened[0]).toContain('HKG-SYX');
+  });
+
+  it('blocks model open_url while the deterministic flight comparison is running', async () => {
+    travelPlanner.reset();
+    const { brain, provider } = setup({
+      requireWakeWord: false,
+      useLiveFlights: true,
+      openExternal: async () => undefined,
+      travelBookingOpenDelayMs: 10,
+      flightSearch: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return {
+          source: 'google_flights',
+          searchUrl: 'https://www.google.com/travel/flights?q=HKG-SYX',
+          offers: [
+            {
+              id: 'CX-1',
+              providerId: 'CX',
+              provider: '国泰',
+              title: '国泰 HKG → SYX',
+              totalPrice: 1800,
+              currency: 'CNY',
+              url: 'https://www.google.com/travel/flights?q=HKG-SYX',
+              conditions: {
+                direct: true,
+                transferCount: 0,
+                baggageKg: 0,
+                refundable: false,
+                departureTime: '09:00',
+              },
+              departTime: '09:00',
+              metadata: { live: true },
+            },
+          ],
+        };
+      },
+    });
+    await brain.start();
+
+    provider.emitTranscript('香港到三亚 2026-11-27 单程 机票 比价', true);
+    await flush();
+    provider.emitToolCall({
+      name: 'open_url',
+      args: { url: 'https://www.google.com/travel/flights' },
+      callId: 'open-during-flight',
+    });
+    await flush();
+
+    const blocked = provider.toolResults.find(
+      (result) => result.callId === 'open-during-flight',
+    );
+    expect(blocked?.output).toContain('FLIGHT_COMPARISON_RUNNING');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+  });
+
   it('rejects a web search for a stable knowledge question', async () => {
     const { brain, provider } = setup();
     await brain.start();
@@ -1282,7 +1669,7 @@ describe('VoiceBrain', () => {
     expect(controller.getStatus().status).toBe('cancelled');
   });
 
-  it('cancels a running task on any confirmed barge', async () => {
+  it('cancels a running GUI task on any confirmed barge', async () => {
     const { brain, provider, controller } = setup();
     await brain.start();
     provider.emitTranscript('Hello CYRVIS', true);
@@ -1296,6 +1683,25 @@ describe('VoiceBrain', () => {
 
     brain.handleBargeStop();
     expect(controller.getStatus().status).toBe('cancelled');
+  });
+
+  it('keeps a coding task alive on an energy barge but hard-stops it explicitly', async () => {
+    const cancel = vi.fn(async () => ({ status: 'cancelled' }) as never);
+    const codingAgent = {
+      isBusy: () => true,
+      cancel,
+    } as unknown as CodingAgentService;
+    const { brain } = setup({ requireWakeWord: false, codingAgent });
+    await brain.start();
+
+    // Speaker echo produces this barge while the assistant reads progress.
+    brain.handleBargeStop();
+    expect(cancel).not.toHaveBeenCalled();
+
+    // KWS "停" / Ctrl+Alt+X must still cancel the background coding task.
+    brain.handleBargeStop(true);
+    await flush();
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it('suspends gaze menus and rejects gaze operations while a coding task is active', async () => {
@@ -1475,6 +1881,21 @@ describe('VoiceBrain', () => {
     await flush();
 
     expect(provider.canceled).toBeGreaterThan(0);
+  });
+
+  it('ignores a long actionable self-echo instead of starting another task', async () => {
+    const { brain, provider } = setup({ requireWakeWord: false });
+    await brain.start();
+    provider.callbacks.onResponseStarted?.();
+    provider.emitAudio(new Int16Array(320));
+    const spoken =
+      '是周末，有没有出行计划？需要的话我也能帮你一起安排。上次你让我创建绘制爱心的 Python 脚本，内容和步骤已经有一部分进展，需要继续完善这个任务吗？';
+    provider.callbacks.onAssistantText?.(spoken, true);
+    provider.emitTranscript(spoken, true);
+    await flush();
+
+    expect(provider.canceled).toBeGreaterThan(0);
+    expect(provider.submitted).toHaveLength(0);
   });
 
   it('ignores an empty transcript when no local user speech happened', async () => {

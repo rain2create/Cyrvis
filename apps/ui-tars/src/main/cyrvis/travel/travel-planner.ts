@@ -162,7 +162,7 @@ export const isTravelPlanningText = (text: string): boolean => {
 
 /** Any reservation / ticketing intent that should skip preference probing. */
 export const isTicketFirstIntent = (text: string): boolean =>
-  /(门票|买票|订票|预订|预约|订座|订位|雪票|缆车票|索道|展览票|演出票|乐园票|门票预约|帮我订|tickets?|reservations?)/i.test(
+  /(机票|航班|比价|门票|买票|订票|预订|预约|订座|订位|雪票|缆车票|索道|展览票|演出票|乐园票|门票预约|帮我订|tickets?|reservations?)/i.test(
     text.trim(),
   );
 
@@ -403,10 +403,16 @@ export class TravelPlanner {
 
     this.inferFromUserText(clean(input.userText));
 
+    const ticketFirstIntent =
+      /机票|航班|比价/.test(clean(this.framework.transport) || '') ||
+      isTicketFirstIntent(clean(input.userText) || '');
+
     const nextDest = this.framework.destination;
     const userBlob = clean(input.userText) || '';
     const wantsFreshTrip =
-      /(重新规划|换个目的地|另外去|改去|不[去到]了|新的旅行)/.test(userBlob);
+      /(重新规划|换个目的地|换目的地|换成|换去|换到|改成|改为|另外去|改去|不[去到]了|新的旅行)/.test(
+        userBlob,
+      );
     if (
       wantsFreshTrip ||
       (previousDest &&
@@ -429,10 +435,7 @@ export class TravelPlanner {
         this.framework.purpose = interestLabel(earlyInterest);
       }
     }
-    if (
-      !this.primaryInterest &&
-      isTicketFirstIntent(clean(input.userText) || '')
-    ) {
+    if (!this.primaryInterest && ticketFirstIntent) {
       const raw = clean(input.userText) || '';
       this.primaryInterest = isSkiOriented(raw) ? 'experience' : 'landmark';
       this.framework.purpose ||= isSkiOriented(raw)
@@ -448,8 +451,7 @@ export class TravelPlanner {
         this.phase === 'collecting_framework' ||
         this.phase === 'skeleton_ready'
       ) {
-        const ticketFirst = isTicketFirstIntent(clean(input.userText) || '');
-        if (ticketFirst) {
+        if (ticketFirstIntent) {
           this.ensureReadyToExpand(clean(input.userText));
           return this.getSnapshot(
             `${this.buildSkeleton()}。你这次更像是先订票。请直接调用 travel_expand_aspect（aspect=tickets，with_search=false），用候选库给出 2～3 个可执行票务选项，不要开浏览器找链接，也不要再跑 travel_probe_highlights。`,
